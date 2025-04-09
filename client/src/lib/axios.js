@@ -2,7 +2,8 @@ import axios from "axios";
 
 // create an axios instance with default settings
 export const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "http://localhost:3000/api",
+  baseURL: "https://video-chat-1ju5.onrender.com/api",
+  // baseURL: import.meta.env.VITE_API_URL || "http://localhost:3000/api",
   headers: {
     "Content-Type": "application/json",
   },
