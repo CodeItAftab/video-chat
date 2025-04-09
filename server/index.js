@@ -43,7 +43,13 @@ app.get("/", (req, res) => {
 
 app.use(errorMiddleware);
 
-ConnectDB("mongodb://localhost:27017/videochat");
+ConnectDB(process.env.MONGO_URI || "mongodb://localhost:27017/videochat")
+  .then(() => {
+    console.log("Connected to MongoDB");
+  })
+  .catch((err) => {
+    console.error("Error connecting to MongoDB", err);
+  });
 
 server.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
