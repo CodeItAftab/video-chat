@@ -9,7 +9,7 @@ const ConnectSocket = (server) => {
   if (!_io) {
     _io = new Server(server, {
       cors: {
-        origin: "https://video-chat-gamma-sand.vercel.app/",
+        origin: "https://video-chat-gamma-sand.vercel.app",
         // origin: "http://localhost:5173",
         methods: ["GET", "POST"],
       },
