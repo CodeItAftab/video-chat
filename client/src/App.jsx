@@ -6,6 +6,7 @@ const AuthLayout = lazy(() => import("@/layouts/AuthLayout"));
 const MainLayout = lazy(() => import("@/layouts/MainLayout"));
 const Login = lazy(() => import("@/pages/Login"));
 const Home = lazy(() => import("@/pages/Home"));
+const Call = lazy(() => import("@/pages/Call"));
 
 function App() {
   return (
@@ -53,7 +54,14 @@ function App() {
               </Suspense>
             }
           />
-          \{" "}
+          <Route
+            path="call"
+            element={
+              <Suspense fallback={<div>Loading...</div>}>
+                <Call />
+              </Suspense>
+            }
+          />
         </Route>
       </Routes>
       <Toaster />

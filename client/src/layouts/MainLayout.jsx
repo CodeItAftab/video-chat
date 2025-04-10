@@ -20,7 +20,7 @@ function MainLayout() {
 
   return (
     <SocketProvider>
-      <div className="h-full w-full">
+      <div className="h-full w-full ">
         <Outlet />
       </div>
     </SocketProvider>

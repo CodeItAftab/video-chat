@@ -20,7 +20,7 @@ function Home() {
   console.log("Home component rendered");
 
   return (
-    <div className="h-full w-full flex  items-center justify-center">
+    <div className="h-full w-full flex  items-center justify-center overflow-hidden">
       <div className="h-full w-full sm:w-8/12 flex flex-col items-center bg-slate-200">
         <header className="w-full h-14 py-2  flex items-center  justify-between px-4">
           <div className="shaddow-md py-2 px-4 bg-white rounded-md">

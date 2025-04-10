@@ -44,6 +44,19 @@ const ConnectSocket = (server) => {
         userIdToSocketId.delete(userId);
         console.log("userIdToSocketId", userIdToSocketId);
       });
+
+      socket.on("call-user", async ({ userId }) => {
+        const socketId = userIdToSocketId.get(userId);
+        const userDetails = await User.findById(userId).select(
+          "name email avatar"
+        );
+        if (socketId) {
+          _io.to(socketId).emit("incomming-call", {
+            from: userId,
+            user: userDetails,
+          });
+        }
+      });
     });
   }
 };
