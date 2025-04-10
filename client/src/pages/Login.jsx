@@ -44,10 +44,7 @@ function Login() {
     onSuccess: responseGoogle,
     onError: responseGoogle,
     flow: "auth-code",
-    redirectUri: [
-      "https://video-chat-gamma-sand.vercel.app/",
-      "http://localhost:5173/",
-    ], // Replace with your app's redirect URI
+    redirectUri: "https://video-chat-gamma-sand.vercel.app/", // Replace with your app's redirect URI
   });
 
   return (
