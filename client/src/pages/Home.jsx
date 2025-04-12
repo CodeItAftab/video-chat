@@ -7,10 +7,11 @@ import { useSocket } from "@/hooks/socket";
 import { SignOut } from "phosphor-react";
 import React, { memo, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 function Home() {
   const { user } = useSelector((state) => state.auth);
-  const { users } = useSelector((state) => state.user);
+  const { users, activeUsers } = useSelector((state) => state.user);
   const dispatch = useDispatch();
   const { socket } = useSocket();
   useEffect(() => {
@@ -30,6 +31,7 @@ function Home() {
                   src={user?.avatar}
                   alt="av"
                   className="w-full object-center object-cover"
+                  loading="lazy"
                 />
               </div>
               <span className="sm:inline-block hidden ">{user?.name}</span>
@@ -51,7 +53,7 @@ function Home() {
             />
           </Button>
         </header>
-        <div className="w-full h-20 flex items-center justify-center">
+        <div className="w-full h-[72px] flex items-center justify-center">
           <div className="flex items-center p-4 justify-center gap-2 w-full sm:w-10/12">
             <Input
               className={"bg-white h-10 "}
@@ -63,14 +65,36 @@ function Home() {
             </Button>
           </div>
         </div>
-        {/* List of all users */}
-        <div className="flex-grow w-full bg-slate-100 flex flex-col items-center justify-start gap-2 p-4">
-          <ul className="w-full flex flex-col items-center gap-2 py-4">
-            {users.map((userItem) => (
-              <UserListItem key={userItem._id} user={userItem} />
-            ))}
-          </ul>
-        </div>
+        <Tabs defaultValue="active" className="w-full flex-grow bg-slate-100">
+          <div className="w-ful flex items-center px-2 bg-slate-200">
+            <TabsList className={"px-2 mb-2 sm:w-[240px] w-full bg--white"}>
+              <TabsTrigger className={"p-3"} value="active">
+                Online Users
+              </TabsTrigger>
+              <TabsTrigger className={"p-3"} value="all">
+                All Users
+              </TabsTrigger>
+            </TabsList>
+          </div>
+          <TabsContent value="active">
+            <div className="flex-grow w-full bg-slate-100 flex flex-col items-center justify-start gap-2 p-4">
+              <ul className="w-full flex flex-col items-center gap-2 py-4">
+                {activeUsers.map((userItem) => (
+                  <UserListItem key={userItem._id} user={userItem} />
+                ))}
+              </ul>
+            </div>
+          </TabsContent>
+          <TabsContent value="all">
+            <div className="flex-grow w-full bg-slate-100 flex flex-col items-center justify-start gap-2 p-4">
+              <ul className="w-full flex flex-col items-center gap-2 py-4">
+                {users.map((userItem) => (
+                  <UserListItem key={userItem._id} user={userItem} />
+                ))}
+              </ul>
+            </div>
+          </TabsContent>
+        </Tabs>
       </div>
       <div className="h-full   sm:w-4/12 sm:block hidden  overflow-hidden">
         <img

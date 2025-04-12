@@ -50,13 +50,15 @@ function UserListItem({ user }) {
       <div className="flex items-center gap-4 h-full">
         <div className="h-10 w-10 rounded-full overflow-hidden flex items-center justify-center">
           <img
-            src={user.avatar || "https://picsum.photos/200/300"}
+            src={user?.avatar}
             alt="av"
             className="w-full object-center object-cover"
             loading="lazy"
           />
         </div>
-        <span className="sm:inline-block md:text-xl text-lg ">{user.name}</span>
+        <span className="sm:inline-block md:text-xl text-lg ">
+          {user?.name}
+        </span>
       </div>
 
       <Dialog open={open} onOpenChange={handleOpen}>

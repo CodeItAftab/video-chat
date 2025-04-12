@@ -3,6 +3,7 @@ import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
 
 const initialState = {
   users: [],
+  activeUsers: [],
 };
 
 export const slice = createSlice({
@@ -18,13 +19,18 @@ export const slice = createSlice({
     setUsers: (state, action) => {
       state.users = action.payload;
     },
+    setActiveusers: (state, action) => {
+      state.activeUsers = action.payload;
+    },
     clearUsers: (state) => {
       state.users = [];
+      state.activeUsers = [];
     },
   },
 });
 
-export const { addUser, removeUser, setUsers, clearUsers } = slice.actions;
+export const { addUser, removeUser, setUsers, setActiveusers, clearUsers } =
+  slice.actions;
 
 export default slice.reducer;
 // This slice manages the user-related state in the Redux store.

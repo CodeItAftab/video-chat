@@ -17,16 +17,17 @@ const ConnectSocket = (server) => {
 
     _io.on("connection", async (socket) => {
       console.log("New client connected:", socket.id);
-      const { userId } = socket.handshake.query;
-      if (!userId) {
+      // const { userId } = socket.handshake.query;
+      const yourId = socket.handshake.query.userId;
+      if (!yourId) {
         console.log("No userId provided in socket connection");
         return;
       }
-      userIdToSocketId.set(userId, socket.id);
+      userIdToSocketId.set(yourId, socket.id);
       console.log("userIdToSocketId", userIdToSocketId);
 
       const otherActiveUsers = [...userIdToSocketId.keys()].filter(
-        (id) => id !== userId
+        (id) => id !== yourId
       );
 
       const OtherUsersWithDetails = await User.find({
@@ -41,19 +42,41 @@ const ConnectSocket = (server) => {
 
       socket.on("disconnect", () => {
         console.log("Client disconnected:", socket.id);
-        userIdToSocketId.delete(userId);
+        userIdToSocketId.delete(yourId);
         console.log("userIdToSocketId", userIdToSocketId);
       });
 
       socket.on("call-user", async ({ userId }) => {
+        console.log("call-user", userId);
         const socketId = userIdToSocketId.get(userId);
-        const userDetails = await User.findById(userId).select(
+        const userDetails = await User.findById(yourId).select(
           "name email avatar"
         );
+        console.log(userDetails, "userDetails");
         if (socketId) {
           _io.to(socketId).emit("incomming-call", {
-            from: userId,
+            from: yourId,
             user: userDetails,
+          });
+        }
+      });
+
+      socket.on("reject-call", ({ userId }) => {
+        const socketId = userIdToSocketId.get(userId);
+        console.log(userId);
+        if (socketId) {
+          _io.to(socketId).emit("call-rejected", {
+            message: "Call rejected",
+          });
+        }
+      });
+
+      socket.on("accept-call", ({ userId }) => {
+        const socketId = userIdToSocketId.get(userId);
+        console.log(userId);
+        if (socketId) {
+          _io.to(socketId).emit("call-accepted", {
+            message: "Call accepted",
           });
         }
       });

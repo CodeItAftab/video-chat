@@ -35,6 +35,15 @@ export const slice = createSlice({
     setIsCallEnded: (state, action) => {
       state.isCallEnded = action.payload;
     },
+    clearCallState: (state) => {
+      state.callUser = null;
+      state.isOnCall = false;
+      state.isCalling = false;
+      state.isReceivingCall = false;
+      state.isCallRejected = false;
+      state.isCallAccepted = false;
+      state.isCallEnded = false;
+    },
   },
 });
 
@@ -46,6 +55,7 @@ export const {
   setIsCallRejected,
   setIsCallAccepted,
   setIsCallEnded,
+  clearCallState,
 } = slice.actions;
 
 export default slice.reducer;

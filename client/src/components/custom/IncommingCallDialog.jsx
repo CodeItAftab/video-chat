@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useCallback } from "react";
 import {
   Dialog,
   DialogContent,
@@ -8,8 +8,36 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Button } from "../ui/button";
+import { useSocket } from "@/hooks/socket";
+import { useNavigate } from "react-router-dom";
+import { useDispatch } from "react-redux";
+import { setIsOnCall } from "@/app/slices/call";
 
-function IncomingCall({ open, handleClose, handleOpenChange, user }) {
+function IncomingCall({ open, setOpen, user }) {
+  const { socket } = useSocket();
+  const navigate = useNavigate();
+  const dispatch = useDispatch();
+  console.log(user, "user in incoming call");
+
+  const handleClose = useCallback(() => {
+    setOpen(false);
+    socket?.emit("reject-call", { userId: user?._id });
+  }, [setOpen, socket, user]);
+
+  const handleOpenChange = useCallback(
+    (open) => {
+      setOpen(!open);
+    },
+    [setOpen]
+  );
+
+  const handleAccept = useCallback(() => {
+    setOpen(false);
+    socket?.emit("accept-call", { userId: user?._id });
+    dispatch(setIsOnCall(true));
+    navigate("/call", { replace: true });
+  }, [setOpen, socket, user, navigate, dispatch]);
+
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger></DialogTrigger>
@@ -47,7 +75,10 @@ function IncomingCall({ open, handleClose, handleOpenChange, user }) {
             >
               Cancel
             </Button>
-            <Button className={"w-1/2 cursor-pointer font-normal  ml-2"}>
+            <Button
+              className={"w-1/2 cursor-pointer font-normal  ml-2"}
+              onClick={handleAccept}
+            >
               Accept
             </Button>
           </div>
