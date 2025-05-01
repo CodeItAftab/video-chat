@@ -91,7 +91,6 @@ function Call() {
     };
   }, []);
 
-  // Attach streams based on swap state
   useEffect(() => {
     if (isVideoSwapped) {
       if (remoteStream && localVideoRef.current) {
@@ -99,6 +98,7 @@ function Call() {
       }
       if (localStream && remoteVideoRef.current) {
         remoteVideoRef.current.srcObject = localStream;
+        remoteVideoRef.current.muted = true; // Mute the remote video when it plays the local stream
       }
     } else {
       if (localStream && localVideoRef.current) {
@@ -106,6 +106,7 @@ function Call() {
       }
       if (remoteStream && remoteVideoRef.current) {
         remoteVideoRef.current.srcObject = remoteStream;
+        remoteVideoRef.current.muted = false; // Ensure remote video is unmuted when playing the remote stream
       }
     }
 
