@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react"; // Import useState
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import SimplePeer from "simple-peer-light";
@@ -12,7 +12,7 @@ import {
 } from "@/app/slices/call";
 import { CallContext } from "@/context/CallContext";
 import { useSocket } from "@/hooks/socket";
-import toast from "react-hot-toast"; // Assuming you are using react-hot-toast
+import toast from "react-hot-toast";
 
 function CallProvider({ children }) {
   const callRef = useRef(null);
@@ -24,15 +24,11 @@ function CallProvider({ children }) {
   const [currentCameraId, setCurrentCameraId] = useState(null);
   const [facingMode, setFacingMode] = useState("user"); // 'user' = front, 'environment' = rear
 
-  // --- State for Camera Switching Loading ---
-  const [isSwitchingCamera, setIsSwitchingCamera] = useState(false);
-  // ------------------------------------------------
-
   const { callUser, signalData: userSignalData } = useSelector(
     (state) => state.call
   );
 
-  // --- State for Streams ---
+  // --- Add State for Streams ---
   const [localStream, setLocalStream] = useState(null);
   const [remoteStream, setRemoteStream] = useState(null);
   // ---------------------------
@@ -40,76 +36,8 @@ function CallProvider({ children }) {
   const handleOpen = useCallback(() => setOpen(true), []);
   const handleClose = useCallback(() => setOpen(false), []);
 
-  const destroyCall = useCallback(() => {
-    console.log("Destroying call...");
-    // Stop peer connection
-    if (callRef.current?.peer) {
-      callRef.current.peer.removeAllListeners(); // Clean up peer listeners
-      callRef.current.peer.destroy();
-      callRef.current.peer = null; // Dereference the peer
-      console.log("SimplePeer instance destroyed.");
-    } else {
-      console.log("No peer instance to destroy.");
-    }
-
-    // Stop local stream tracks
-    if (localStream) {
-      console.log("Stopping local stream tracks...");
-      localStream.getTracks().forEach((track) => {
-        if (track.readyState !== "ended") {
-          console.log(`Stopping track: ${track.kind}, ID: ${track.id}`);
-          track.stop();
-        } else {
-          console.log(`Track already ended: ${track.kind}, ID: ${track.id}`);
-        }
-      });
-      console.log("Local stream tracks stopped.");
-    } else {
-      console.log("No local stream to stop tracks.");
-    }
-
-    // Clear state
-    dispatch(clearCallState()); // Clear Redux call state
-    setLocalStream(null); // Clear local stream state
-    setRemoteStream(null); // Clear remote stream state
-    callRef.current = null; // Clear ref
-    setIsSwitchingCamera(false); // Ensure switching state is false
-    setOpen(false); // Close any open dialogs
-
-    console.log("Call state cleared and resources released.");
-
-    // Navigate away from the call page
-    // Use replace: true to avoid navigating back to the call page with the browser back button
-    if (window.location.pathname === "/call") {
-      navigate("/home", { replace: true });
-      console.log("Navigated away from call page.");
-    } else {
-      console.log("Not on call page, skipping navigation.");
-    }
-  }, [dispatch, navigate, localStream]); // Dependency on localStream is needed to stop its tracks
-
-  const rejectCall = useCallback(() => {
-    console.log("Call rejected.");
-    // Inform the caller via socket if needed (optional based on your backend)
-    // if (socket && callUser?._id) {
-    //     socket.emit("reject-call", { userId: callUser._id });
-    //     console.log(`Emitted 'reject-call' for user: ${callUser._id}`);
-    // } else {
-    //     console.warn("Socket not available or callUser missing when rejecting call.");
-    // }
-
-    // Clean up local state
-    destroyCall(); // Use destroyCall to clean up state and potentially streams/peer
-  }, [destroyCall /* Add socket, callUser if you emit reject-call */]);
-
   const initiateCall = useCallback(() => {
-    // Add check if already on call or calling
-    if (!callUser || callRef.current?.peer) {
-      console.warn(
-        "Cannot initiate call: No call user or peer already exists."
-      );
-      return;
-    }
+    // ... (check callUser) ...
 
     navigator.mediaDevices
       .getUserMedia({
@@ -120,78 +48,49 @@ function CallProvider({ children }) {
       })
       .then((stream) => {
         console.log("Local stream captured:", stream);
-        setLocalStream(stream); // Set local stream state
+        setLocalStream(stream); // <-- Set local stream state
 
         const peer = new SimplePeer({
           initiator: true,
-          trickle: false, // Consider setting to true for faster connection setup
+          trickle: false,
           stream, // Use the captured stream
           config: {
             iceServers: [
               { urls: "stun:stun.l.google.com:19302" }, // Google's free STUN server
-              // You might want to add TURN servers for better reliability
             ],
           },
         });
 
-        callRef.current = { peer };
+        // Store peer instance (localStream is now handled by state)
+        callRef.current = { peer }; // <-- Removed localStream from here
 
         peer.on("signal", (signalData) => {
-          console.log("Peer signal (initiator):", signalData);
           socket?.emit("initiate-call", { userId: callUser._id, signalData });
         });
 
         peer.on("stream", (incomingRemoteStream) => {
           console.log("Remote stream received:", incomingRemoteStream);
-          setRemoteStream(incomingRemoteStream); // Set remote stream state
-        });
-
-        peer.on("error", (err) => {
-          console.error("Peer error (initiator):", err);
-          toast.error("Call error occurred.");
-          destroyCall(); // Automatically end call on peer error
-        });
-
-        peer.on("close", () => {
-          console.log("Peer connection closed (initiator).");
-          // Handle peer closure if not triggered by explicit endCall
-          // destroyCall(); // destroyCall already called by call-ended or explicit endCall
+          setRemoteStream(incomingRemoteStream); // <-- Set remote stream state
+          // No longer need window event:
+          // callRef.current.remoteStream = remoteStream;
+          // window.dispatchEvent(new Event("remote-stream-received"));
         });
 
         socket?.on("call-accepted", ({ signalData }) => {
-          console.log("Call accepted by remote user.");
           dispatch(setIsCallAccepted(true));
           peer.signal(signalData);
         });
-        // Clean up the specific listener once accepted or if initiate fails
-        peer.once("signal", () => {
-          // assuming signal is sent once for offer/answer
-          socket?.off("call-accepted"); // Clean up after the offer is sent and accepted
-        });
 
-        dispatch(setIsOnCall(true)); // Indicate call is attempting to connect
         navigate("/call");
       })
       .catch((err) => {
-        console.error("Failed to get local media for initiating call:", err);
-        toast.error("Could not access camera/microphone.");
+        console.error("Failed to get local media:", err);
+        alert("Could not access camera/microphone.");
         setLocalStream(null); // Clear stream state on error
-        // Optionally clear call state or navigate back if media access is required
-        dispatch(clearCallState());
-        navigate("/home"); // Navigate away if call cannot start
       });
-  }, [callUser, socket, dispatch, navigate, destroyCall]); // Added destroyCall dependency
+  }, [callUser, socket, dispatch, navigate]);
 
   const answerCall = useCallback(() => {
-    if (!userSignalData || !callUser || callRef.current?.peer) {
-      console.warn(
-        "Cannot answer call: Missing signal data, call user, or peer already exists."
-      );
-      // Optionally reject call or clear state if in an invalid state
-      rejectCall(); // Use rejectCall to clean up
-      return;
-    }
-
     navigator.mediaDevices
       .getUserMedia({
         video: {
@@ -201,83 +100,82 @@ function CallProvider({ children }) {
       })
       .then((stream) => {
         console.log("Local stream captured:", stream);
-        setLocalStream(stream); // Set local stream state
+        setLocalStream(stream); // <-- Set local stream state
 
         const peer = new SimplePeer({
-          initiator: false, // Answering user is not the initiator
-          trickle: false, // Consider setting to true
+          initiator: false,
+          trickle: false,
           stream, // Use the captured stream
           config: {
             iceServers: [
               { urls: "stun:stun.l.google.com:19302" }, // Google's free STUN server
-              // Add TURN servers here
             ],
           },
         });
 
-        callRef.current = { peer };
+        callRef.current = { peer }; // <-- Removed localStream from here
 
-        dispatch(setIsOnCall(true)); // Indicate call is active
-        dispatch(setIsIncommingCall(false)); // No longer an incoming call
+        dispatch(setIsOnCall(true));
+        dispatch(setIsIncommingCall(false));
         setOpen(false); // Close modal/dialog on answer
 
         peer.on("signal", (signalData) => {
-          console.log("Peer signal (answerer):", signalData);
           socket?.emit("answer-call", { userId: callUser._id, signalData });
         });
 
         peer.on("stream", (incomingRemoteStream) => {
           console.log("Remote stream received:", incomingRemoteStream);
-          setRemoteStream(incomingRemoteStream); // Set remote stream state
+          setRemoteStream(incomingRemoteStream); // <-- Set remote stream state
+          // No longer need window event
         });
 
-        peer.on("error", (err) => {
-          console.error("Peer error (answerer):", err);
-          toast.error("Call error occurred.");
-          destroyCall(); // Automatically end call on peer error
-        });
-
-        peer.on("close", () => {
-          console.log("Peer connection closed (answerer).");
-          // Handle peer closure
-        });
-
-        peer.signal(userSignalData); // Signal the initiator with the answer
+        peer.signal(userSignalData);
         navigate("/call");
       })
       .catch((err) => {
-        console.error("Failed to get local media for answering call:", err);
-        toast.error("Could not access camera/microphone to answer.");
+        console.error("Failed to get local media:", err);
+        alert("Could not access camera/microphone.");
         setLocalStream(null); // Clear stream state on error
-        // Reject the call state and close modal if media access fails
-        rejectCall(); // Use rejectCall for cleanup
+        // Optionally reject call state or navigate away
+        dispatch(clearCallState());
+        setOpen(false);
       });
-  }, [
-    callUser,
-    socket,
-    userSignalData,
-    dispatch,
-    navigate,
-    rejectCall,
-    setOpen,
-    destroyCall,
-  ]); // Added dependencies
+  }, [callUser, socket, userSignalData, dispatch, navigate]);
+
+  const destroyCall = useCallback(() => {
+    callRef.current?.peer?.destroy();
+
+    // --- Stop local stream tracks ---
+    if (localStream) {
+      localStream.getTracks().forEach((track) => track.stop());
+      console.log("Local stream tracks stopped.");
+    }
+    // --------------------------------
+
+    callRef.current = null;
+    dispatch(clearCallState());
+    setLocalStream(null); // <-- Clear local stream state
+    setRemoteStream(null); // <-- Clear remote stream state
+    navigate("/home", { replace: true });
+    setOpen(false);
+  }, [dispatch, navigate, localStream]); // <-- Add localStream dependency
 
   const endCall = useCallback(() => {
-    console.log("Ending call via user action.");
-    // Emit socket event to inform the other user
-    if (socket && callUser?._id) {
-      socket.emit("end-call", { userId: callUser._id });
-      console.log(`Emitted 'end-call' for user: ${callUser._id}`);
-    } else {
-      console.warn(
-        "Socket not available or callUser missing when ending call."
-      );
-    }
-
-    // Clean up local resources and state
+    socket?.emit("end-call", { userId: callUser?._id }); // Added safe navigation for callUser
     destroyCall();
-  }, [callUser, socket, destroyCall]); // Dependencies are correct
+  }, [callUser, socket, destroyCall]);
+
+  const rejectCall = useCallback(() => {
+    console.log("Call rejected");
+    setOpen(false);
+    dispatch(clearCallState());
+    // Optionally inform the caller via socket
+    // socket?.emit("reject-call", { userId: callUser?._id });
+  }, [dispatch /*, socket, callUser*/]); // Add dependencies if using socket here
+
+  // Inside your CallProvider function component
+
+  // Inside your CallProvider function component
 
   const switchCamera = useCallback(async () => {
     // --- Start Device Check (Keep this as requested) ---
@@ -301,8 +199,6 @@ function CallProvider({ children }) {
       return;
     }
 
-    setIsSwitchingCamera(true); // <-- Set switching state to true when switching starts
-
     try {
       // Enumerate devices again to ensure we have the latest list and labels
       const devices = await navigator.mediaDevices.enumerateDevices();
@@ -311,10 +207,10 @@ function CallProvider({ children }) {
       if (videoInputs.length < 2) {
         console.log("No alternate camera found.");
         toast.info("No alternate camera found.");
-        setIsSwitchingCamera(false); // <-- Set switching state to false if no alternate camera
         return;
       }
 
+      // Find the index of the current camera and determine the next
       const currentIndex = videoInputs.findIndex(
         (d) => d.deviceId === currentCameraId
       );
@@ -325,39 +221,44 @@ function CallProvider({ children }) {
       // --- Stop all tracks in the *current* local stream ---
       console.log("Stopping current local stream tracks...");
       localStream.getTracks().forEach((track) => {
+        // Check if the track is still active before stopping
         if (track.readyState !== "ended") {
           console.log(`Stopping track: ${track.kind}, ID: ${track.id}`);
-          track.stop(); // Signal the browser to stop the track
+          track.stop();
         } else {
           console.log(`Track already ended: ${track.kind}, ID: ${track.id}`);
         }
       });
       console.log("Current local stream tracks stopped.");
+      // Give a very small moment for tracks to potentially release (heuristic, not guaranteed cross-browser)
+      // await new Promise(resolve => setTimeout(resolve, 50)); // Optional: uncomment if still seeing issues, but test without first.
+      // ---------------------------------------------------
 
-      // Optional: await new Promise(resolve => setTimeout(resolve, 50));
-
+      // --- Get the *new* stream from the next camera ---
       console.log(
         `Attempting to get new stream from device ID: ${nextDeviceId}`
       );
       const newStream = await navigator.mediaDevices.getUserMedia({
-        video: { deviceId: { exact: nextDeviceId } }, // Request video from the specific next device
-        audio: true, // Include audio
+        video: { deviceId: { exact: nextDeviceId } },
+        audio: true, // Request audio as well to maintain the stream structure
       });
       console.log("New stream obtained:", newStream);
+      // ---------------------------------------------
 
       // --- Replace the video track in the peer connection ---
       if (callRef.current?.peer && callRef.current.peer._pc) {
         console.log("Replacing video track in peer connection...");
-        const pc = callRef.current.peer._pc; // Get the underlying RTCPeerConnection
-        const senders = pc.getSenders(); // Get the list of RtpSenders
+        const pc = callRef.current.peer._pc;
+        const senders = pc.getSenders();
         const videoSender = senders.find(
           (sender) => sender.track && sender.track.kind === "video"
         );
         const newVideoTrack = newStream.getVideoTracks()[0];
 
         if (videoSender && newVideoTrack) {
+          // Ensure the sender's track isn't already the new one (shouldn't happen in switch but good check)
           if (videoSender.track !== newVideoTrack) {
-            await videoSender.replaceTrack(newVideoTrack); // Replace the old track with the new one
+            await videoSender.replaceTrack(newVideoTrack);
             console.log("Video track replaced successfully.");
           } else {
             console.log("Track already replaced, skipping replaceTrack.");
@@ -366,12 +267,16 @@ function CallProvider({ children }) {
           console.warn(
             "No suitable video sender found or new video track missing. Attempting to add tracks."
           );
+          // If replaceTrack isn't possible, try adding the new tracks.
+          // This might happen if video was initially off or sender is gone.
+          // Be cautious: adding tracks might require renegotiation depending on SimplePeer/browser.
           newStream.getTracks().forEach((track) => {
+            // Avoid adding the same track multiple times
             const existingSender = senders.find(
               (sender) => sender.track === track
             );
             if (!existingSender) {
-              pc.addTrack(track, newStream);
+              pc.addTrack(track, newStream); // Note: addTrack might need the stream as second arg in some libraries/specs
               console.log(`Added new track to peer connection: ${track.kind}`);
             } else {
               console.log(
@@ -392,30 +297,42 @@ function CallProvider({ children }) {
       setLocalStream(newStream);
       setCurrentCameraId(nextDeviceId);
 
+      // Attempt to update facing mode based on device info (heuristic)
       const settings = newStream.getVideoTracks()[0].getSettings();
       if (settings.facingMode) {
         setFacingMode(settings.facingMode);
+        console.log("Facing mode updated:", settings.facingMode);
       } else if (nextCameraInfo.label) {
+        // Fallback to checking label if facingMode is not directly available in settings
         const label = nextCameraInfo.label.toLowerCase();
-        if (label.includes("front") || label.includes("user"))
+        if (label.includes("front") || label.includes("user")) {
           setFacingMode("user");
-        else if (label.includes("back") || label.includes("environment"))
+          console.log("Facing mode inferred from label: user");
+        } else if (label.includes("back") || label.includes("environment")) {
           setFacingMode("environment");
-        else setFacingMode("user");
+          console.log("Facing mode inferred from label: environment");
+        } else {
+          setFacingMode("user"); // Default if unable to determine
+          console.log(
+            "Could not infer facing mode from label, defaulting to user."
+          );
+        }
       } else {
-        setFacingMode("user");
+        setFacingMode("user"); // Default if no label or settings
+        console.log(
+          "Could not infer facing mode, defaulting to user (no settings/label)."
+        );
       }
-      console.log("Facing mode updated (heuristic/settings):", facingMode);
-
-      setIsSwitchingCamera(false); // <-- Set switching state to false on success
+      // --------------------------
     } catch (err) {
-      // --- Error Handling and Recovery ---
       console.error("Failed to switch camera:", err);
       toast.error("Failed to switch camera.");
 
+      // --- Add Robust Error Recovery ---
       console.log(
         "Attempting to recover local stream by getting a default stream..."
       );
+      // If switching to the specific camera fails, try to get *any* video and audio stream
       navigator.mediaDevices
         .getUserMedia({ video: true, audio: true })
         .then((recoveredStream) => {
@@ -423,9 +340,10 @@ function CallProvider({ children }) {
             "Successfully recovered a local stream:",
             recoveredStream
           );
-          setLocalStream(recoveredStream);
-          toast.success("Camera switched (recovered default camera).");
+          setLocalStream(recoveredStream); // Update local state with the recovered stream
+          toast.success("Camera switched (recovered).");
 
+          // Attempt to replace the track in the peer connection with the recovered track
           if (callRef.current?.peer && callRef.current.peer._pc) {
             console.log("Attempting to replace track with recovered stream...");
             const pc = callRef.current.peer._pc;
@@ -444,21 +362,40 @@ function CallProvider({ children }) {
               } else {
                 console.log("Recovered track is already the current track.");
               }
+
+              // Update current camera ID and facing mode based on the recovered stream
               const trackSettings = recoveredVideoTrack.getSettings();
-              if (trackSettings.deviceId)
+              if (trackSettings.deviceId) {
                 setCurrentCameraId(trackSettings.deviceId);
-              if (trackSettings.facingMode)
+              }
+              if (trackSettings.facingMode) {
                 setFacingMode(trackSettings.facingMode);
-              else {
-                setFacingMode("user");
-                console.log(
-                  "Could not determine recovered stream facing mode, defaulting to user."
-                );
+              } else if (trackSettings.deviceId) {
+                // Try to infer facing mode from device list again using deviceId
+                navigator.mediaDevices.enumerateDevices().then((devices) => {
+                  const device = devices.find(
+                    (d) => d.deviceId === trackSettings.deviceId
+                  );
+                  if (device && device.label) {
+                    const label = device.label.toLowerCase();
+                    if (label.includes("front") || label.includes("user"))
+                      setFacingMode("user");
+                    else if (
+                      label.includes("back") ||
+                      label.includes("environment")
+                    )
+                      setFacingMode("environment");
+                    else setFacingMode("user"); // Default
+                  }
+                });
+              } else {
+                setFacingMode("user"); // Default if no info
               }
             } else {
               console.warn(
                 "Could not find video sender or recovered video track to replace. Attempting to add recovered tracks."
               );
+              // Fallback: just add the tracks from the recovered stream
               recoveredStream.getTracks().forEach((track) => {
                 const existingSender = senders.find(
                   (sender) => sender.track === track
@@ -481,12 +418,10 @@ function CallProvider({ children }) {
             recoveryErr
           );
           toast.error("Critical error: Could not restore camera.");
-          destroyCall(); // End the call if recovery fails
-        })
-        .finally(() => {
-          setIsSwitchingCamera(false); // <-- Set switching state to false after recovery attempt finishes
+          // If recovery also fails, consider ending the call as the camera is unusable
+          destroyCall(); // Automatically end call if camera fails critically
         });
-      // --- End Error Handling and Recovery ---
+      // --- End Robust Error Recovery ---
     }
   }, [
     localStream,
@@ -496,136 +431,48 @@ function CallProvider({ children }) {
     setCurrentCameraId,
     setFacingMode,
     destroyCall,
-    facingMode,
-    setIsSwitchingCamera,
-  ]); // Add setIsSwitchingCamera dependency
+  ]); // Added destroyCall dependency for error recovery
 
   useEffect(() => {
     // Ensure socket handlers don't rely on potentially stale state from closure
     // Use refs or ensure callbacks are updated if dependencies change
 
     const handleIncomingCall = ({ signalData, user }) => {
-      console.log("Received incoming call from:", user);
-      // Check if already on a call
-      if (callRef.current?.peer || localStream) {
-        console.warn(
-          "Ignoring incoming call: Already in a call or stream active."
-        );
-        // Optionally emit a busy signal back
-        // socket?.emit("call-busy", { userId: user._id });
-        return;
-      }
       dispatch(setIsIncommingCall(true));
       dispatch(setCallUser(user));
       dispatch(setSignalData(signalData));
-      setOpen(true); // Open the incoming call dialog/modal
+      setOpen(true);
     };
 
     const handleCallEnded = () => {
-      console.log("Received call-ended signal from remote user.");
       // Make sure destroyCall uses the latest state (useCallback handles this)
       destroyCall();
-      // navigate("/home", { replace: true }); // destroyCall already navigates
+      navigate("/home", { replace: true });
       toast.success("Call ended");
     };
 
-    // Clean up function for useEffect
-    const cleanupSocketListeners = () => {
-      console.log("Cleaning up socket listeners...");
-      socket?.off("incomming-call", handleIncomingCall);
-      socket?.off("call-ended", handleCallEnded);
-      // Note: 'call-accepted' listener is added/removed inside initiateCall
-    };
-
-    // Set up listeners
-    console.log("Setting up socket listeners...");
     socket?.on("incomming-call", handleIncomingCall);
     socket?.on("call-ended", handleCallEnded);
 
-    // Return cleanup function
-    return cleanupSocketListeners;
-
-    // Dependencies: socket is needed to attach/detach listeners.
-    // dispatch, destroyCall, setOpen, navigate are needed inside the handlers,
-    // and useCallback/useMemo on the handlers ensure they are stable if their
-    // dependencies change. Listing them here ensures the effect re-runs
-    // if the handlers themselves change identity (due to their dependencies changing).
-  }, [socket, dispatch, destroyCall, setOpen, navigate, localStream]);
-
-  // Effect to enumerate media devices on mount
-  useEffect(() => {
-    console.log("Enumerating media devices...");
-    navigator.mediaDevices
-      .enumerateDevices()
-      .then((devices) => {
-        const videoInputs = devices.filter((d) => d.kind === "videoinput");
-        setVideoDevices(videoInputs);
-
-        // Default to first camera found
-        if (videoInputs.length > 0) {
-          setCurrentCameraId(videoInputs[0].deviceId);
-          // Attempt to set initial facing mode based on the first device label
-          const firstCamera = videoInputs[0];
-          if (firstCamera.label) {
-            const label = firstCamera.label.toLowerCase();
-            if (label.includes("front") || label.includes("user"))
-              setFacingMode("user");
-            else if (label.includes("back") || label.includes("environment"))
-              setFacingMode("environment");
-            else setFacingMode("user"); // Default
-          } else {
-            setFacingMode("user"); // Default if no label
-          }
-          console.log("Initial camera ID set:", videoInputs[0].deviceId);
-          console.log("Initial facing mode set (heuristic):", facingMode); // Note: facingMode state might not update instantly here
-        } else {
-          console.warn("No video input devices found.");
-          setCurrentCameraId(null);
-          setFacingMode("user"); // Default facing mode
-        }
-      })
-      .catch((err) => {
-        console.error("Error enumerating devices:", err);
-        toast.error("Could not access media devices list.");
-      });
-  }, []); // Empty dependency array means this effect runs once on mount
-
-  // Clean up local stream and peer connection when component unmounts
-  useEffect(() => {
     return () => {
-      console.log("CallProvider unmounting. Cleaning up resources.");
-      // Ensure peer and streams are destroyed on unmount if still active
-      // The destroyCall function already handles state cleanup and navigation,
-      // but we might want a minimal cleanup here just for peer/streams
-      // if destroyCall wasn't fully executed (e.g., navigation happened unexpectedly).
-      // However, relying on destroyCall called by endCall/call-ended/error is standard.
-      // Let's ensure peer is destroyed if it still exists.
-      if (callRef.current?.peer) {
-        console.log("Destroying peer on unmount.");
-        callRef.current.peer.removeAllListeners();
-        callRef.current.peer.destroy();
-        callRef.current.peer = null;
-      }
-      if (localStream) {
-        console.log("Stopping local stream tracks on unmount.");
-        localStream.getTracks().forEach((track) => {
-          if (track.readyState !== "ended") {
-            track.stop();
-          }
-        });
-        setLocalStream(null); // Clean up state
-      }
-      if (remoteStream) {
-        console.log("Clearing remote stream on unmount.");
-        // Remote stream tracks are usually stopped when the remote peer stops sending or peer connection closes
-        setRemoteStream(null); // Clean up state
-      }
-      dispatch(clearCallState()); // Ensure Redux state is clean
-      setIsSwitchingCamera(false); // Ensure state is reset
-      setOpen(false); // Close dialog
-      callRef.current = null; // Clear ref
+      socket?.off("incomming-call", handleIncomingCall);
+      socket?.off("call-ended", handleCallEnded);
+      // Clean up listeners for 'call-accepted' added inside initiateCall if component unmounts before acceptance
+      // socket?.off("call-accepted"); // This might be tricky depending on exact flow
     };
-  }, [dispatch, localStream, remoteStream]); // Dependencies for cleanup
+  }, [socket, dispatch, destroyCall, setOpen, navigate]); // Added missing dependencies
+
+  useEffect(() => {
+    navigator.mediaDevices.enumerateDevices().then((devices) => {
+      const videoInputs = devices.filter((d) => d.kind === "videoinput");
+      setVideoDevices(videoInputs);
+
+      // Default to first camera
+      if (videoInputs.length > 0) {
+        setCurrentCameraId(videoInputs[0].deviceId);
+      }
+    });
+  }, []);
 
   return (
     <CallContext.Provider
@@ -633,24 +480,21 @@ function CallProvider({ children }) {
         // Pass state directly
         localStream,
         remoteStream,
-        isSwitchingCamera, // <-- Pass the new state via context
         // Pass functions
         initiateCall,
         answerCall,
         endCall,
         rejectCall,
-        switchCamera, // Pass the updated switchCamera
         callRef,
         open,
         setOpen,
         handleOpen,
         handleClose,
+        switchCamera,
         videoDevices,
         currentCameraId,
         setCurrentCameraId,
         setVideoDevices,
-        facingMode, // Pass facingMode if you use it in the Call component
-        setFacingMode, // Pass setFacingMode if you need to change it from Call component
       }}
     >
       {children}
