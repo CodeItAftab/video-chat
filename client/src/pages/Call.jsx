@@ -124,20 +124,24 @@ function Call() {
 
   useEffect(() => {
     if (isVideoSwapped) {
+      // When videos are swapped
       if (remoteStream && localVideoRef.current) {
         localVideoRef.current.srcObject = remoteStream;
+        localVideoRef.current.muted = false; // Unmute to hear remote audio
       }
       if (localStream && remoteVideoRef.current) {
         remoteVideoRef.current.srcObject = localStream;
-        remoteVideoRef.current.muted = true; // Mute the remote video when it plays the local stream
+        remoteVideoRef.current.muted = true; // Mute to prevent feedback
       }
     } else {
+      // Default state
       if (localStream && localVideoRef.current) {
         localVideoRef.current.srcObject = localStream;
+        localVideoRef.current.muted = true; // Mute local video
       }
       if (remoteStream && remoteVideoRef.current) {
         remoteVideoRef.current.srcObject = remoteStream;
-        remoteVideoRef.current.muted = false; // Unmute the remote video when it plays the remote stream
+        remoteVideoRef.current.muted = false; // Unmute remote video
       }
     }
 
@@ -153,7 +157,6 @@ function Call() {
       }
     };
   }, [localStream, remoteStream, isVideoSwapped]);
-
   // Handle video swap
   const handleVideoSwap = () => {
     // Toggle the video swap state

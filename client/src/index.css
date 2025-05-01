@@ -125,9 +125,7 @@
   }
 }
 
-* {
-  overflow: hidden;
-}
+
 
 @keyframes spin-once {
   0% {
