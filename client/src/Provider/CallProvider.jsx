@@ -12,6 +12,7 @@ import {
 } from "@/app/slices/call";
 import { CallContext } from "@/context/CallContext";
 import { useSocket } from "@/hooks/socket";
+import toast from "react-hot-toast";
 
 function CallProvider({ children }) {
   const callRef = useRef(null);
@@ -19,6 +20,9 @@ function CallProvider({ children }) {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const [open, setOpen] = React.useState(false);
+  const [videoDevices, setVideoDevices] = useState([]);
+  const [currentCameraId, setCurrentCameraId] = useState(null);
+
   const { callUser, signalData: userSignalData } = useSelector(
     (state) => state.call
   );
@@ -35,7 +39,12 @@ function CallProvider({ children }) {
     // ... (check callUser) ...
 
     navigator.mediaDevices
-      .getUserMedia({ video: true, audio: true })
+      .getUserMedia({
+        video: {
+          frameRate: { ideal: 30, max: 30 },
+        },
+        audio: true,
+      })
       .then((stream) => {
         console.log("Local stream captured:", stream);
         setLocalStream(stream); // <-- Set local stream state
@@ -44,6 +53,11 @@ function CallProvider({ children }) {
           initiator: true,
           trickle: false,
           stream, // Use the captured stream
+          config: {
+            iceServers: [
+              { urls: "stun:stun.l.google.com:19302" }, // Google's free STUN server
+            ],
+          },
         });
 
         // Store peer instance (localStream is now handled by state)
@@ -77,7 +91,12 @@ function CallProvider({ children }) {
 
   const answerCall = useCallback(() => {
     navigator.mediaDevices
-      .getUserMedia({ video: true, audio: true })
+      .getUserMedia({
+        video: {
+          frameRate: { ideal: 30, max: 30 },
+        },
+        audio: true,
+      })
       .then((stream) => {
         console.log("Local stream captured:", stream);
         setLocalStream(stream); // <-- Set local stream state
@@ -86,6 +105,11 @@ function CallProvider({ children }) {
           initiator: false,
           trickle: false,
           stream, // Use the captured stream
+          config: {
+            iceServers: [
+              { urls: "stun:stun.l.google.com:19302" }, // Google's free STUN server
+            ],
+          },
         });
 
         callRef.current = { peer }; // <-- Removed localStream from here
@@ -148,6 +172,52 @@ function CallProvider({ children }) {
     // socket?.emit("reject-call", { userId: callUser?._id });
   }, [dispatch /*, socket, callUser*/]); // Add dependencies if using socket here
 
+  const switchCamera = async () => {
+    if (!localStream) return;
+
+    // Get the list of video devices again (in case it changes)
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const videoInputs = devices.filter((d) => d.kind === "videoinput");
+
+    if (videoInputs.length < 2) return alert("No alternate camera found.");
+
+    // Find next camera
+    const currentIndex = videoInputs.findIndex(
+      (d) => d.deviceId === currentCameraId
+    );
+    const nextIndex = (currentIndex + 1) % videoInputs.length;
+    const nextDeviceId = videoInputs[nextIndex].deviceId;
+
+    try {
+      const newStream = await navigator.mediaDevices.getUserMedia({
+        video: { deviceId: { exact: nextDeviceId } },
+        audio: false, // Keep existing audio
+      });
+
+      // Replace the video track in the peer connection
+      const newVideoTrack = newStream.getVideoTracks()[0];
+      const oldVideoTrack = localStream.getVideoTracks()[0];
+
+      if (callRef.current?.peer && callRef.current.peer.streams[0]) {
+        const sender = callRef.current.peer._pc
+          .getSenders()
+          .find((s) => s.track?.kind === "video");
+
+        if (sender) {
+          sender.replaceTrack(newVideoTrack);
+        }
+      }
+
+      // Stop old video track and update local stream
+      oldVideoTrack.stop();
+      localStream.removeTrack(oldVideoTrack);
+      localStream.addTrack(newVideoTrack);
+      setCurrentCameraId(nextDeviceId);
+    } catch (err) {
+      console.error("Failed to switch camera:", err);
+    }
+  };
+
   useEffect(() => {
     // Ensure socket handlers don't rely on potentially stale state from closure
     // Use refs or ensure callbacks are updated if dependencies change
@@ -162,6 +232,8 @@ function CallProvider({ children }) {
     const handleCallEnded = () => {
       // Make sure destroyCall uses the latest state (useCallback handles this)
       destroyCall();
+      navigate("/home", { replace: true });
+      toast.success("Call ended");
     };
 
     socket?.on("incomming-call", handleIncomingCall);
@@ -173,7 +245,19 @@ function CallProvider({ children }) {
       // Clean up listeners for 'call-accepted' added inside initiateCall if component unmounts before acceptance
       // socket?.off("call-accepted"); // This might be tricky depending on exact flow
     };
-  }, [socket, dispatch, destroyCall, setOpen]); // Added missing dependencies
+  }, [socket, dispatch, destroyCall, setOpen, navigate]); // Added missing dependencies
+
+  useEffect(() => {
+    navigator.mediaDevices.enumerateDevices().then((devices) => {
+      const videoInputs = devices.filter((d) => d.kind === "videoinput");
+      setVideoDevices(videoInputs);
+
+      // Default to first camera
+      if (videoInputs.length > 0) {
+        setCurrentCameraId(videoInputs[0].deviceId);
+      }
+    });
+  }, []);
 
   return (
     <CallContext.Provider
@@ -186,13 +270,16 @@ function CallProvider({ children }) {
         answerCall,
         endCall,
         rejectCall,
-        // Pass necessary state/refs if still needed elsewhere
-        callRef, // Keep if direct peer access is needed, e.g., for advanced features
+        callRef,
         open,
         setOpen,
-        handleOpen, // Consider removing if 'open' is only for incoming calls
-        handleClose, // Consider removing
-        // You might not need destroyCall exposed if endCall covers usage
+        handleOpen,
+        handleClose,
+        switchCamera,
+        videoDevices,
+        currentCameraId,
+        setCurrentCameraId,
+        setVideoDevices,
       }}
     >
       {children}
