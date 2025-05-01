@@ -122,11 +122,6 @@ function Call() {
   //   };
   // }, [localStream, remoteStream, isVideoSwapped]);
 
-  // Toggle controls visibility
-  const toggleControls = useCallback(() => {
-    setShowControls((prev) => !prev);
-  }, []);
-
   useEffect(() => {
     if (isVideoSwapped) {
       if (remoteStream && localVideoRef.current) {
@@ -142,7 +137,7 @@ function Call() {
       }
       if (remoteStream && remoteVideoRef.current) {
         remoteVideoRef.current.srcObject = remoteStream;
-        remoteVideoRef.current.muted = false; // Ensure remote video is unmuted when playing the remote stream
+        remoteVideoRef.current.muted = false; // Unmute the remote video when it plays the remote stream
       }
     }
 
@@ -369,7 +364,6 @@ function Call() {
       className="relative h-full w-full flex flex-col bg-[#111b21] overflow-hidden"
       onMouseMove={() => setShowControls(true)}
       onTouchStart={() => setShowControls(true)}
-      onClick={() => toggleControls()}
     >
       {/* Call info bar */}
       <div
