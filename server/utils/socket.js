@@ -75,10 +75,10 @@ const ConnectSocket = (server) => {
 
       socket.on("initiate-call", async ({ userId, signalData }) => {
         //
-        console.log("initiate-call", {
-          userId,
-          signalData,
-        });
+        // console.log("initiate-call", {
+        //   userId,
+        //   signalData,
+        // });
         const to = userIdToSocketId.get(userId);
 
         _io.to(to).emit("incomming-call", {
@@ -90,7 +90,7 @@ const ConnectSocket = (server) => {
       socket.on("answer-call", (data) => {
         to = userIdToSocketId.get(data.userId);
         _io.to(to).emit("call-accepted", { signalData: data.signalData });
-        console.log("callAccepted", data.signalData);
+        // console.log("callAccepted", data.signalData);
       });
 
       socket.on("endCall", ({ to }) => {

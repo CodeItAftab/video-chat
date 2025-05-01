@@ -188,7 +188,8 @@ function CallProvider({ children }) {
 
     if (!isMobileOrTabletDevice) {
       console.log("Camera switching is only enabled on mobile/tablet devices.");
-      toast.info("Camera switching is only available on mobile or tablets.");
+      toast.success("Camera switching is only available on mobile or tablets.");
+
       return;
     }
     // --- End Device Check ---
@@ -206,7 +207,7 @@ function CallProvider({ children }) {
 
       if (videoInputs.length < 2) {
         console.log("No alternate camera found.");
-        toast.info("No alternate camera found.");
+        toast.success("No alternate camera found.");
         return;
       }
 
@@ -495,6 +496,7 @@ function CallProvider({ children }) {
         currentCameraId,
         setCurrentCameraId,
         setVideoDevices,
+        facingMode,
       }}
     >
       {children}
