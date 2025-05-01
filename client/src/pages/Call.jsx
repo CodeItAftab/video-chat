@@ -91,6 +91,42 @@ function Call() {
     };
   }, []);
 
+  // Attach streams based on swap state
+  // useEffect(() => {
+  //   if (isVideoSwapped) {
+  //     if (remoteStream && localVideoRef.current) {
+  //       localVideoRef.current.srcObject = remoteStream;
+  //     }
+  //     if (localStream && remoteVideoRef.current) {
+  //       remoteVideoRef.current.srcObject = localStream;
+  //     }
+  //   } else {
+  //     if (localStream && localVideoRef.current) {
+  //       localVideoRef.current.srcObject = localStream;
+  //     }
+  //     if (remoteStream && remoteVideoRef.current) {
+  //       remoteVideoRef.current.srcObject = remoteStream;
+  //     }
+  //   }
+
+  //   const localVideo = localVideoRef.current;
+  //   const remoteVideo = remoteVideoRef.current;
+
+  //   return () => {
+  //     if (localVideo) {
+  //       localVideo.srcObject = null;
+  //     }
+  //     if (remoteVideo) {
+  //       remoteVideo.srcObject = null;
+  //     }
+  //   };
+  // }, [localStream, remoteStream, isVideoSwapped]);
+
+  // Toggle controls visibility
+  const toggleControls = () => {
+    setShowControls((prev) => !prev);
+  };
+
   useEffect(() => {
     if (isVideoSwapped) {
       if (remoteStream && localVideoRef.current) {
@@ -333,6 +369,7 @@ function Call() {
       className="relative h-full w-full flex flex-col bg-[#111b21] overflow-hidden"
       onMouseMove={() => setShowControls(true)}
       onTouchStart={() => setShowControls(true)}
+      onClick={toggleControls}
     >
       {/* Call info bar */}
       <div
