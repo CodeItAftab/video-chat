@@ -22,6 +22,7 @@ function CallProvider({ children }) {
   const [open, setOpen] = React.useState(false);
   const [videoDevices, setVideoDevices] = useState([]);
   const [currentCameraId, setCurrentCameraId] = useState(null);
+  const [facingMode, setFacingMode] = useState("user"); // 'user' = front, 'environment' = rear
 
   const { callUser, signalData: userSignalData } = useSelector(
     (state) => state.call
@@ -172,51 +173,152 @@ function CallProvider({ children }) {
     // socket?.emit("reject-call", { userId: callUser?._id });
   }, [dispatch /*, socket, callUser*/]); // Add dependencies if using socket here
 
-  const switchCamera = async () => {
-    if (!localStream) return;
+  // Inside your CallProvider function component
 
-    // Get the list of video devices again (in case it changes)
-    const devices = await navigator.mediaDevices.enumerateDevices();
-    const videoInputs = devices.filter((d) => d.kind === "videoinput");
+  const switchCamera = useCallback(async () => {
+    // --- Start Device Check ---
+    const userAgent = navigator.userAgent;
+    const hasTouch = navigator.maxTouchPoints > 0;
+    // A simple check for common mobile/tablet indicators
+    const isMobileOrTabletDevice =
+      /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+        userAgent
+      ) || hasTouch;
 
-    if (videoInputs.length < 2) return alert("No alternate camera found.");
+    if (!isMobileOrTabletDevice) {
+      console.log("Camera switching is only enabled on mobile/tablet devices.");
+      // Optionally show a toast or alert to the user
+      toast.info("Camera switching is only available on mobile or tablets."); // Assuming toast is available from react-hot-toast import
+      return; // Stop the function if not mobile/tablet
+    }
+    // --- End Device Check ---
 
-    // Find next camera
-    const currentIndex = videoInputs.findIndex(
-      (d) => d.deviceId === currentCameraId
-    );
-    const nextIndex = (currentIndex + 1) % videoInputs.length;
-    const nextDeviceId = videoInputs[nextIndex].deviceId;
+    if (!localStream) {
+      console.warn("Cannot switch camera: Local stream not available.");
+      toast.error("Local stream not available.");
+      return;
+    }
 
     try {
-      const newStream = await navigator.mediaDevices.getUserMedia({
-        video: { deviceId: { exact: nextDeviceId } },
-        audio: false, // Keep existing audio
-      });
+      // Enumerate devices again to ensure we have the latest list and labels
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const videoInputs = devices.filter((d) => d.kind === "videoinput");
 
-      // Replace the video track in the peer connection
-      const newVideoTrack = newStream.getVideoTracks()[0];
-      const oldVideoTrack = localStream.getVideoTracks()[0];
-
-      if (callRef.current?.peer && callRef.current.peer.streams[0]) {
-        const sender = callRef.current.peer._pc
-          .getSenders()
-          .find((s) => s.track?.kind === "video");
-
-        if (sender) {
-          sender.replaceTrack(newVideoTrack);
-        }
+      if (videoInputs.length < 2) {
+        console.log("No alternate camera found.");
+        toast.info("No alternate camera found.");
+        return; // Return if only one camera is available
       }
 
-      // Stop old video track and update local stream
-      oldVideoTrack.stop();
-      localStream.removeTrack(oldVideoTrack);
-      localStream.addTrack(newVideoTrack);
+      // Find the index of the current camera and determine the next
+      const currentIndex = videoInputs.findIndex(
+        (d) => d.deviceId === currentCameraId
+      );
+      const nextIndex = (currentIndex + 1) % videoInputs.length;
+      const nextCameraInfo = videoInputs[nextIndex]; // Get info for label/facing mode check later
+      const nextDeviceId = nextCameraInfo.deviceId;
+
+      // --- Stop all tracks in the *current* local stream ---
+      console.log("Stopping current local stream tracks...");
+      localStream.getTracks().forEach((track) => {
+        console.log(`Stopping track: ${track.kind}`);
+        track.stop();
+      });
+      console.log("Current local stream tracks stopped.");
+      // ---------------------------------------------------
+
+      // --- Get the *new* stream from the next camera ---
+      console.log(
+        `Attempting to get new stream from device ID: ${nextDeviceId}`
+      );
+      const newStream = await navigator.mediaDevices.getUserMedia({
+        video: { deviceId: { exact: nextDeviceId } },
+        audio: true, // Request audio as well to maintain the stream structure
+      });
+      console.log("New stream obtained:", newStream);
+      // ---------------------------------------------
+
+      // --- Replace the video track in the peer connection ---
+      if (callRef.current?.peer) {
+        console.log("Replacing video track in peer connection...");
+        const senders = callRef.current.peer._pc.getSenders();
+        const videoSender = senders.find(
+          (sender) => sender.track && sender.track.kind === "video"
+        );
+
+        if (videoSender) {
+          videoSender.replaceTrack(newStream.getVideoTracks()[0]);
+          console.log("Video track replaced successfully.");
+        } else {
+          console.warn(
+            "No video sender found in peer connection. Adding new track."
+          );
+          // This might happen if video was initially off. Add the new track.
+          newStream.getTracks().forEach((track) => {
+            // Check if track is already added to avoid errors
+            const existingSender = senders.find(
+              (sender) => sender.track === track
+            );
+            if (!existingSender) {
+              callRef.current.peer.addTrack(track, newStream);
+              console.log(`Added track: ${track.kind}`);
+            }
+          });
+          console.log("New tracks added to peer connection.");
+        }
+      } else {
+        console.warn(
+          "Peer connection not available when switching camera. Stream updated locally only."
+        );
+      }
+      // ------------------------------------------------------
+
+      // --- Update local state ---
+      setLocalStream(newStream);
       setCurrentCameraId(nextDeviceId);
+
+      // Attempt to update facing mode based on device info (heuristic)
+      const settings = newStream.getVideoTracks()[0].getSettings();
+      if (settings.facingMode) {
+        setFacingMode(settings.facingMode);
+        console.log("Facing mode updated:", settings.facingMode);
+      } else if (nextCameraInfo.label) {
+        // Fallback to checking label if facingMode is not directly available in settings
+        const label = nextCameraInfo.label.toLowerCase();
+        if (label.includes("front") || label.includes("user")) {
+          setFacingMode("user");
+          console.log("Facing mode inferred from label: user");
+        } else if (label.includes("back") || label.includes("environment")) {
+          setFacingMode("environment");
+          console.log("Facing mode inferred from label: environment");
+        } else {
+          setFacingMode("user"); // Default if unable to determine
+          console.log(
+            "Could not infer facing mode from label, defaulting to user."
+          );
+        }
+      } else {
+        setFacingMode("user"); // Default if no label or settings
+        console.log(
+          "Could not infer facing mode, defaulting to user (no settings/label)."
+        );
+      }
+      // --------------------------
     } catch (err) {
       console.error("Failed to switch camera:", err);
+      toast.error("Failed to switch camera.");
+      // Optional: Add logic here to handle failure more gracefully,
+      // e.g., attempt to revert to the previous stream or signal an error state.
+      // For now, the error is logged and a toast is shown.
     }
-  };
+  }, [
+    localStream,
+    callRef,
+    currentCameraId,
+    setLocalStream,
+    setCurrentCameraId,
+    setFacingMode,
+  ]);
 
   useEffect(() => {
     // Ensure socket handlers don't rely on potentially stale state from closure
