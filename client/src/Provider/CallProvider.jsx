@@ -40,6 +40,68 @@ function CallProvider({ children }) {
   const handleOpen = useCallback(() => setOpen(true), []);
   const handleClose = useCallback(() => setOpen(false), []);
 
+  const destroyCall = useCallback(() => {
+    console.log("Destroying call...");
+    // Stop peer connection
+    if (callRef.current?.peer) {
+      callRef.current.peer.removeAllListeners(); // Clean up peer listeners
+      callRef.current.peer.destroy();
+      callRef.current.peer = null; // Dereference the peer
+      console.log("SimplePeer instance destroyed.");
+    } else {
+      console.log("No peer instance to destroy.");
+    }
+
+    // Stop local stream tracks
+    if (localStream) {
+      console.log("Stopping local stream tracks...");
+      localStream.getTracks().forEach((track) => {
+        if (track.readyState !== "ended") {
+          console.log(`Stopping track: ${track.kind}, ID: ${track.id}`);
+          track.stop();
+        } else {
+          console.log(`Track already ended: ${track.kind}, ID: ${track.id}`);
+        }
+      });
+      console.log("Local stream tracks stopped.");
+    } else {
+      console.log("No local stream to stop tracks.");
+    }
+
+    // Clear state
+    dispatch(clearCallState()); // Clear Redux call state
+    setLocalStream(null); // Clear local stream state
+    setRemoteStream(null); // Clear remote stream state
+    callRef.current = null; // Clear ref
+    setIsSwitchingCamera(false); // Ensure switching state is false
+    setOpen(false); // Close any open dialogs
+
+    console.log("Call state cleared and resources released.");
+
+    // Navigate away from the call page
+    // Use replace: true to avoid navigating back to the call page with the browser back button
+    if (window.location.pathname === "/call") {
+      navigate("/home", { replace: true });
+      console.log("Navigated away from call page.");
+    } else {
+      console.log("Not on call page, skipping navigation.");
+    }
+  }, [dispatch, navigate, localStream]); // Dependency on localStream is needed to stop its tracks
+
+  const rejectCall = useCallback(() => {
+    console.log("Call rejected.");
+    // Inform the caller via socket if needed (optional based on your backend)
+    // if (socket && callUser?._id) {
+    //     socket.emit("reject-call", { userId: callUser._id });
+    //     console.log(`Emitted 'reject-call' for user: ${callUser._id}`);
+    // } else {
+    //     console.warn("Socket not available or callUser missing when rejecting call.");
+    // }
+
+    // Clean up local state
+    destroyCall(); // Use destroyCall to clean up state and potentially streams/peer
+  }, [destroyCall /* Add socket, callUser if you emit reject-call */]);
+
   const initiateCall = useCallback(() => {
     // Add check if already on call or calling
     if (!callUser || callRef.current?.peer) {
@@ -201,54 +263,6 @@ function CallProvider({ children }) {
     destroyCall,
   ]); // Added dependencies
 
-  const destroyCall = useCallback(() => {
-    console.log("Destroying call...");
-    // Stop peer connection
-    if (callRef.current?.peer) {
-      callRef.current.peer.removeAllListeners(); // Clean up peer listeners
-      callRef.current.peer.destroy();
-      callRef.current.peer = null; // Dereference the peer
-      console.log("SimplePeer instance destroyed.");
-    } else {
-      console.log("No peer instance to destroy.");
-    }
-
-    // Stop local stream tracks
-    if (localStream) {
-      console.log("Stopping local stream tracks...");
-      localStream.getTracks().forEach((track) => {
-        if (track.readyState !== "ended") {
-          console.log(`Stopping track: ${track.kind}, ID: ${track.id}`);
-          track.stop();
-        } else {
-          console.log(`Track already ended: ${track.kind}, ID: ${track.id}`);
-        }
-      });
-      console.log("Local stream tracks stopped.");
-    } else {
-      console.log("No local stream to stop tracks.");
-    }
-
-    // Clear state
-    dispatch(clearCallState()); // Clear Redux call state
-    setLocalStream(null); // Clear local stream state
-    setRemoteStream(null); // Clear remote stream state
-    callRef.current = null; // Clear ref
-    setIsSwitchingCamera(false); // Ensure switching state is false
-    setOpen(false); // Close any open dialogs
-
-    console.log("Call state cleared and resources released.");
-
-    // Navigate away from the call page
-    // Use replace: true to avoid navigating back to the call page with the browser back button
-    if (window.location.pathname === "/call") {
-      navigate("/home", { replace: true });
-      console.log("Navigated away from call page.");
-    } else {
-      console.log("Not on call page, skipping navigation.");
-    }
-  }, [dispatch, navigate, localStream]); // Dependency on localStream is needed to stop its tracks
-
   const endCall = useCallback(() => {
     console.log("Ending call via user action.");
     // Emit socket event to inform the other user
@@ -264,20 +278,6 @@ function CallProvider({ children }) {
     // Clean up local resources and state
     destroyCall();
   }, [callUser, socket, destroyCall]); // Dependencies are correct
-
-  const rejectCall = useCallback(() => {
-    console.log("Call rejected.");
-    // Inform the caller via socket if needed (optional based on your backend)
-    // if (socket && callUser?._id) {
-    //     socket.emit("reject-call", { userId: callUser._id });
-    //     console.log(`Emitted 'reject-call' for user: ${callUser._id}`);
-    // } else {
-    //     console.warn("Socket not available or callUser missing when rejecting call.");
-    // }
-
-    // Clean up local state
-    destroyCall(); // Use destroyCall to clean up state and potentially streams/peer
-  }, [destroyCall /* Add socket, callUser if you emit reject-call */]);
 
   const switchCamera = useCallback(async () => {
     // --- Start Device Check (Keep this as requested) ---
@@ -495,8 +495,8 @@ function CallProvider({ children }) {
     setLocalStream,
     setCurrentCameraId,
     setFacingMode,
-    toast,
     destroyCall,
+    facingMode,
     setIsSwitchingCamera,
   ]); // Add setIsSwitchingCamera dependency
 
@@ -550,7 +550,7 @@ function CallProvider({ children }) {
     // and useCallback/useMemo on the handlers ensure they are stable if their
     // dependencies change. Listing them here ensures the effect re-runs
     // if the handlers themselves change identity (due to their dependencies changing).
-  }, [socket, dispatch, destroyCall, setOpen, navigate]);
+  }, [socket, dispatch, destroyCall, setOpen, navigate, localStream]);
 
   // Effect to enumerate media devices on mount
   useEffect(() => {

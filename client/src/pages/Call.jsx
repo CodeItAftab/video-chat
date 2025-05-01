@@ -85,7 +85,6 @@ function Call() {
       <div className="flex md:flex-row flex-col w-full items-center justify-center md:gap-8 gap-3 md:p-8 px-2 py-3 flex-grow bg-black">
         {/* Local Video */}
         <div className="relative md:w-1/2 w-auto md:h-full h-[45%] rounded-2xl bg-white overflow-hidden">
-          {" "}
           {/* Added overflow-hidden */}
           <video
             className="size-full object-cover bg-black h-full"
@@ -97,7 +96,6 @@ function Call() {
           {/* Show spinner if local stream is null OR if currently switching camera */}
           {!localStream || isSwitchingCamera ? (
             <div className="absolute inset-0 flex h-full w-full items-center justify-center text-white bg-black bg-opacity-75">
-              {" "}
               {/* Added bg-opacity for better visibility */}
               {isSwitchingCamera ? (
                 // Spinner specifically for camera switching
@@ -115,7 +113,6 @@ function Call() {
 
         {/* Remote Video */}
         <div className="relative md:w-1/2 w-auto md:h-full h-[45%] rounded-2xl bg-white overflow-hidden">
-          {" "}
           {/* Added overflow-hidden */}
           <video
             className="size-full object-cover bg-black h-full"
@@ -152,7 +149,6 @@ function Call() {
       {/* Controls */}
       <div className="w-full md:h-20 h-16 flex justify-center bg-black/90 shrink-0">
         <div className="flex items-center justify-center gap-4 md:w-[400px] w-3/4 h-10/12 rounded-md bg-slate-700 px-2">
-          {" "}
           {/* Added some padding */}
           {/* Video Toggle Button (example) */}
           <Button className="text-white p-3 size-10 rounded-full text-lg font-semibold">
