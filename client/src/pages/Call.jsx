@@ -1,770 +1,559 @@
-import React, { useCallback, useEffect, useRef, useState } from "react"; // Import useState
-import { useDispatch, useSelector } from "react-redux";
-import { useNavigate } from "react-router-dom";
-import SimplePeer from "simple-peer-light";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useCall } from "@/hooks/call";
 import {
-  clearCallState,
-  setCallUser,
-  setIsCallAccepted,
-  setIsIncommingCall,
-  setIsOnCall,
-  setSignalData,
-} from "@/app/slices/call";
-import { CallContext } from "@/context/CallContext";
-import { useSocket } from "@/hooks/socket";
-import toast from "react-hot-toast";
+  ArrowsClockwise,
+  MicrophoneSlash,
+  PhoneSlash,
+  Spinner,
+  VideoCamera,
+  Microphone,
+  VideoCameraSlash,
+  ArrowsCounterClockwise,
+} from "phosphor-react";
 
-function CallProvider({ children }) {
-  const callRef = useRef(null);
-  const { socket } = useSocket();
-  const dispatch = useDispatch();
-  const navigate = useNavigate();
-  const [open, setOpen] = React.useState(false);
-  const [videoDevices, setVideoDevices] = useState([]);
-  const [currentCameraId, setCurrentCameraId] = useState(null);
-  const [facingMode, setFacingMode] = useState("user"); // 'user' = front, 'environment' = rear
-
-  const { callUser, signalData: userSignalData } = useSelector(
-    (state) => state.call
-  );
-
-  // --- Add State for Streams ---
-  const [localStream, setLocalStream] = useState(null);
-  const [remoteStream, setRemoteStream] = useState(null);
-  // ---------------------------
-
-  const handleOpen = useCallback(() => setOpen(true), []);
-  const handleClose = useCallback(() => setOpen(false), []);
-
-  const initiateCall = useCallback(() => {
-    // ... (check callUser) ...
-
-    navigator.mediaDevices
-      .getUserMedia({
-        video: {
-          frameRate: { ideal: 30, max: 30 },
-        },
-        audio: true,
-      })
-      .then((stream) => {
-        console.log("Local stream captured:", stream);
-        setLocalStream(stream); // <-- Set local stream state
-
-        const peer = new SimplePeer({
-          initiator: true,
-          trickle: false,
-          stream, // Use the captured stream
-          config: {
-            iceServers: [
-              { urls: "stun:stun.l.google.com:19302" }, // Google's free STUN server
-            ],
-          },
-        });
-
-        // Store peer instance (localStream is now handled by state)
-        callRef.current = { peer }; // <-- Removed localStream from here
-
-        peer.on("signal", (signalData) => {
-          socket?.emit("initiate-call", { userId: callUser._id, signalData });
-        });
-
-        peer.on("stream", (incomingRemoteStream) => {
-          console.log("Remote stream received:", incomingRemoteStream);
-          setRemoteStream(incomingRemoteStream); // <-- Set remote stream state
-          // No longer need window event:
-          // callRef.current.remoteStream = remoteStream;
-          // window.dispatchEvent(new Event("remote-stream-received"));
-        });
-
-        socket?.on("call-accepted", ({ signalData }) => {
-          dispatch(setIsCallAccepted(true));
-          peer.signal(signalData);
-        });
-
-        navigate("/call");
-      })
-      .catch((err) => {
-        console.error("Failed to get local media:", err);
-        alert("Could not access camera/microphone.");
-        setLocalStream(null); // Clear stream state on error
-      });
-  }, [callUser, socket, dispatch, navigate]);
-
-  const answerCall = useCallback(() => {
-    navigator.mediaDevices
-      .getUserMedia({
-        video: {
-          frameRate: { ideal: 30, max: 30 },
-        },
-        audio: true,
-      })
-      .then((stream) => {
-        console.log("Local stream captured:", stream);
-        setLocalStream(stream); // <-- Set local stream state
-
-        const peer = new SimplePeer({
-          initiator: false,
-          trickle: false,
-          stream, // Use the captured stream
-          config: {
-            iceServers: [
-              { urls: "stun:stun.l.google.com:19302" }, // Google's free STUN server
-            ],
-          },
-        });
-
-        callRef.current = { peer }; // <-- Removed localStream from here
-
-        dispatch(setIsOnCall(true));
-        dispatch(setIsIncommingCall(false));
-        setOpen(false); // Close modal/dialog on answer
-
-        peer.on("signal", (signalData) => {
-          socket?.emit("answer-call", { userId: callUser._id, signalData });
-        });
-
-        peer.on("stream", (incomingRemoteStream) => {
-          console.log("Remote stream received:", incomingRemoteStream);
-          setRemoteStream(incomingRemoteStream); // <-- Set remote stream state
-          // No longer need window event
-        });
-
-        peer.signal(userSignalData);
-        navigate("/call");
-      })
-      .catch((err) => {
-        console.error("Failed to get local media:", err);
-        alert("Could not access camera/microphone.");
-        setLocalStream(null); // Clear stream state on error
-        // Optionally reject call state or navigate away
-        dispatch(clearCallState());
-        setOpen(false);
-      });
-  }, [callUser, socket, userSignalData, dispatch, navigate]);
-
-  const destroyCall = useCallback(() => {
-    callRef.current?.peer?.destroy();
-
-    // --- Stop local stream tracks ---
-    if (localStream) {
-      localStream.getTracks().forEach((track) => track.stop());
-      console.log("Local stream tracks stopped.");
-    }
-    // --------------------------------
-
-    callRef.current = null;
-    dispatch(clearCallState());
-    setLocalStream(null); // <-- Clear local stream state
-    setRemoteStream(null); // <-- Clear remote stream state
-    navigate("/home", { replace: true });
-    setOpen(false);
-  }, [dispatch, navigate, localStream]); // <-- Add localStream dependency
-
-  const endCall = useCallback(() => {
-    socket?.emit("end-call", { userId: callUser?._id }); // Added safe navigation for callUser
-    destroyCall();
-  }, [callUser, socket, destroyCall]);
-
-  const rejectCall = useCallback(() => {
-    console.log("Call rejected");
-    setOpen(false);
-    dispatch(clearCallState());
-    // Optionally inform the caller via socket
-    // socket?.emit("reject-call", { userId: callUser?._id });
-  }, [dispatch /*, socket, callUser*/]);
-
-  // const switchCamera = useCallback(async () => {
-  //   // --- Start Device Check (Keep this as requested) ---
-  //   const userAgent = navigator.userAgent;
-  //   const hasTouch = navigator.maxTouchPoints > 0;
-  //   const isMobileOrTabletDevice =
-  //     /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
-  //       userAgent
-  //     ) || hasTouch;
-
-  //   if (!isMobileOrTabletDevice) {
-  //     console.log("Camera switching is only enabled on mobile/tablet devices.");
-  //     toast.success("Camera switching is only available on mobile or tablets.");
-
-  //     return;
-  //   }
-  //   // --- End Device Check ---
-
-  //   if (!localStream) {
-  //     console.warn("Cannot switch camera: Local stream not available.");
-  //     toast.error("Local stream not available for switching.");
-  //     return;
-  //   }
-
-  //   try {
-  //     // Enumerate devices again to ensure we have the latest list and labels
-  //     const devices = await navigator.mediaDevices.enumerateDevices();
-  //     const videoInputs = devices.filter((d) => d.kind === "videoinput");
-
-  //     if (videoInputs.length < 2) {
-  //       console.log("No alternate camera found.");
-  //       toast.success("No alternate camera found.");
-  //       return;
-  //     }
-
-  //     // Find the index of the current camera and determine the next
-  //     const currentIndex = videoInputs.findIndex(
-  //       (d) => d.deviceId === currentCameraId
-  //     );
-  //     const nextIndex = (currentIndex + 1) % videoInputs.length;
-  //     const nextCameraInfo = videoInputs[nextIndex];
-  //     const nextDeviceId = nextCameraInfo.deviceId;
-
-  //     // --- Stop all tracks in the *current* local stream ---
-  //     console.log("Stopping current local stream tracks...");
-  //     localStream.getTracks().forEach((track) => {
-  //       // Check if the track is still active before stopping
-  //       if (track.readyState !== "ended") {
-  //         console.log(`Stopping track: ${track.kind}, ID: ${track.id}`);
-  //         track.stop();
-  //       } else {
-  //         console.log(`Track already ended: ${track.kind}, ID: ${track.id}`);
-  //       }
-  //     });
-  //     console.log("Current local stream tracks stopped.");
-  //     // Give a very small moment for tracks to potentially release (heuristic, not guaranteed cross-browser)
-  //     // await new Promise(resolve => setTimeout(resolve, 50)); // Optional: uncomment if still seeing issues, but test without first.
-  //     // ---------------------------------------------------
-
-  //     // --- Get the *new* stream from the next camera ---
-  //     console.log(
-  //       `Attempting to get new stream from device ID: ${nextDeviceId}`
-  //     );
-  //     const newStream = await navigator.mediaDevices.getUserMedia({
-  //       video: { deviceId: { exact: nextDeviceId } },
-  //       audio: true, // Request audio as well to maintain the stream structure
-  //     });
-  //     console.log("New stream obtained:", newStream);
-  //     // ---------------------------------------------
-
-  //     // --- Replace the video track in the peer connection ---
-  //     if (callRef.current?.peer && callRef.current.peer._pc) {
-  //       console.log("Replacing video track in peer connection...");
-  //       const pc = callRef.current.peer._pc;
-  //       const senders = pc.getSenders();
-  //       const videoSender = senders.find(
-  //         (sender) => sender.track && sender.track.kind === "video"
-  //       );
-  //       const newVideoTrack = newStream.getVideoTracks()[0];
-
-  //       if (videoSender && newVideoTrack) {
-  //         // Ensure the sender's track isn't already the new one (shouldn't happen in switch but good check)
-  //         if (videoSender.track !== newVideoTrack) {
-  //           await videoSender.replaceTrack(newVideoTrack);
-  //           console.log("Video track replaced successfully.");
-  //         } else {
-  //           console.log("Track already replaced, skipping replaceTrack.");
-  //         }
-  //       } else {
-  //         console.warn(
-  //           "No suitable video sender found or new video track missing. Attempting to add tracks."
-  //         );
-  //         // If replaceTrack isn't possible, try adding the new tracks.
-  //         // This might happen if video was initially off or sender is gone.
-  //         // Be cautious: adding tracks might require renegotiation depending on SimplePeer/browser.
-  //         newStream.getTracks().forEach((track) => {
-  //           // Avoid adding the same track multiple times
-  //           const existingSender = senders.find(
-  //             (sender) => sender.track === track
-  //           );
-  //           if (!existingSender) {
-  //             pc.addTrack(track, newStream); // Note: addTrack might need the stream as second arg in some libraries/specs
-  //             console.log(`Added new track to peer connection: ${track.kind}`);
-  //           } else {
-  //             console.log(
-  //               `Track already has a sender, skipping addTrack: ${track.kind}`
-  //             );
-  //           }
-  //         });
-  //         console.log("New tracks processed for peer connection.");
-  //       }
-  //     } else {
-  //       console.warn(
-  //         "Peer connection or its internal PC not available when switching camera. Stream updated locally only."
-  //       );
-  //     }
-  //     // ------------------------------------------------------
-
-  //     // --- Update local state ---
-  //     setLocalStream(newStream);
-  //     setCurrentCameraId(nextDeviceId);
-
-  //     // Attempt to update facing mode based on device info (heuristic)
-  //     const settings = newStream.getVideoTracks()[0].getSettings();
-  //     if (settings.facingMode) {
-  //       setFacingMode(settings.facingMode);
-  //       console.log("Facing mode updated:", settings.facingMode);
-  //     } else if (nextCameraInfo.label) {
-  //       // Fallback to checking label if facingMode is not directly available in settings
-  //       const label = nextCameraInfo.label.toLowerCase();
-  //       if (label.includes("front") || label.includes("user")) {
-  //         setFacingMode("user");
-  //         console.log("Facing mode inferred from label: user");
-  //       } else if (label.includes("back") || label.includes("environment")) {
-  //         setFacingMode("environment");
-  //         console.log("Facing mode inferred from label: environment");
-  //       } else {
-  //         setFacingMode("user"); // Default if unable to determine
-  //         console.log(
-  //           "Could not infer facing mode from label, defaulting to user."
-  //         );
-  //       }
-  //     } else {
-  //       setFacingMode("user"); // Default if no label or settings
-  //       console.log(
-  //         "Could not infer facing mode, defaulting to user (no settings/label)."
-  //       );
-  //     }
-  //     // --------------------------
-  //   } catch (err) {
-  //     console.error("Failed to switch camera:", err);
-  //     toast.error("Failed to switch camera.");
-
-  //     // --- Add Robust Error Recovery ---
-  //     console.log(
-  //       "Attempting to recover local stream by getting a default stream..."
-  //     );
-  //     // If switching to the specific camera fails, try to get *any* video and audio stream
-  //     navigator.mediaDevices
-  //       .getUserMedia({ video: true, audio: true })
-  //       .then((recoveredStream) => {
-  //         console.log(
-  //           "Successfully recovered a local stream:",
-  //           recoveredStream
-  //         );
-  //         setLocalStream(recoveredStream); // Update local state with the recovered stream
-  //         toast.success("Camera switched (recovered).");
-
-  //         // Attempt to replace the track in the peer connection with the recovered track
-  //         if (callRef.current?.peer && callRef.current.peer._pc) {
-  //           console.log("Attempting to replace track with recovered stream...");
-  //           const pc = callRef.current.peer._pc;
-  //           const senders = pc.getSenders();
-  //           const videoSender = senders.find(
-  //             (sender) => sender.track && sender.track.kind === "video"
-  //           );
-  //           const recoveredVideoTrack = recoveredStream.getVideoTracks()[0];
-
-  //           if (videoSender && recoveredVideoTrack) {
-  //             if (videoSender.track !== recoveredVideoTrack) {
-  //               videoSender.replaceTrack(recoveredVideoTrack);
-  //               console.log(
-  //                 "Video track replaced with recovered stream track."
-  //               );
-  //             } else {
-  //               console.log("Recovered track is already the current track.");
-  //             }
-
-  //             // Update current camera ID and facing mode based on the recovered stream
-  //             const trackSettings = recoveredVideoTrack.getSettings();
-  //             if (trackSettings.deviceId) {
-  //               setCurrentCameraId(trackSettings.deviceId);
-  //             }
-  //             if (trackSettings.facingMode) {
-  //               setFacingMode(trackSettings.facingMode);
-  //             } else if (trackSettings.deviceId) {
-  //               // Try to infer facing mode from device list again using deviceId
-  //               navigator.mediaDevices.enumerateDevices().then((devices) => {
-  //                 const device = devices.find(
-  //                   (d) => d.deviceId === trackSettings.deviceId
-  //                 );
-  //                 if (device && device.label) {
-  //                   const label = device.label.toLowerCase();
-  //                   if (label.includes("front") || label.includes("user"))
-  //                     setFacingMode("user");
-  //                   else if (
-  //                     label.includes("back") ||
-  //                     label.includes("environment")
-  //                   )
-  //                     setFacingMode("environment");
-  //                   else setFacingMode("user"); // Default
-  //                 }
-  //               });
-  //             } else {
-  //               setFacingMode("user"); // Default if no info
-  //             }
-  //           } else {
-  //             console.warn(
-  //               "Could not find video sender or recovered video track to replace. Attempting to add recovered tracks."
-  //             );
-  //             // Fallback: just add the tracks from the recovered stream
-  //             recoveredStream.getTracks().forEach((track) => {
-  //               const existingSender = senders.find(
-  //                 (sender) => sender.track === track
-  //               );
-  //               if (!existingSender) {
-  //                 pc.addTrack(track, recoveredStream);
-  //                 console.log(`Added recovered track: ${track.kind}`);
-  //               }
-  //             });
-  //           }
-  //         } else {
-  //           console.warn(
-  //             "Peer connection not available during recovery attempt. Stream updated locally only."
-  //           );
-  //         }
-  //       })
-  //       .catch((recoveryErr) => {
-  //         console.error(
-  //           "Failed to recover local stream after switch error:",
-  //           recoveryErr
-  //         );
-  //         toast.error("Critical error: Could not restore camera.");
-  //         // If recovery also fails, consider ending the call as the camera is unusable
-  //         destroyCall(); // Automatically end call if camera fails critically
-  //       });
-  //     // --- End Robust Error Recovery ---
-  //   }
-  // }, [
-  //   localStream,
-  //   callRef,
-  //   currentCameraId,
-  //   setLocalStream,
-  //   setCurrentCameraId,
-  //   setFacingMode,
-  //   destroyCall,
-  // ]); // Added destroyCall dependency for error recovery
-
-  const switchCamera = useCallback(async () => {
-    // --- Start Device Check (Keep this as requested) ---
-    const userAgent = navigator.userAgent;
-    const hasTouch = navigator.maxTouchPoints > 0;
-    const isMobileOrTabletDevice =
-      /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
-        userAgent
-      ) || hasTouch;
-
-    if (!isMobileOrTabletDevice) {
-      console.log("Camera switching is only enabled on mobile/tablet devices.");
-      toast.success("Camera switching is only available on mobile or tablets.");
-      return;
-    } // --- End Device Check ---
-    if (!localStream) {
-      console.warn("Cannot switch camera: Local stream not available.");
-      toast.error("Local stream not available for switching.");
-      return;
-    }
-
-    try {
-      // Enumerate devices again to ensure we have the latest list and labels
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      const videoInputs = devices.filter((d) => d.kind === "videoinput");
-
-      if (videoInputs.length < 2) {
-        console.log("No alternate camera found.");
-        toast.success("No alternate camera found.");
-        return;
-      } // Find the index of the current camera and determine the next
-
-      const currentIndex = videoInputs.findIndex(
-        (d) => d.deviceId === currentCameraId
-      );
-      const nextIndex = (currentIndex + 1) % videoInputs.length;
-      const nextCameraInfo = videoInputs[nextIndex];
-      const nextDeviceId = nextCameraInfo.deviceId; // --- Stop only the VIDEO track(s) in the *current* local stream ---
-
-      console.log("Stopping current local stream VIDEO tracks...");
-      localStream.getVideoTracks().forEach((track) => {
-        // <-- Changed to getVideoTracks()
-        if (track.readyState !== "ended") {
-          console.log(`Stopping video track: ${track.id}`);
-          track.stop();
-        } else {
-          console.log(`Video track already ended: ${track.id}`);
-        }
-      });
-      console.log("Current local stream VIDEO tracks stopped."); // ----------------------------------------------------------------- // --- Get the *new* stream from the next camera (include audio) ---
-      console.log(
-        `Attempting to get new stream from device ID: ${nextDeviceId}`
-      );
-      const newStream = await navigator.mediaDevices.getUserMedia({
-        video: { deviceId: { exact: nextDeviceId } },
-        audio: true, // IMPORTANT: Ensure audio is requested in the new stream
-      });
-      console.log("New stream obtained:", newStream); // ------------------------------------------------------------------ // --- Replace the video and audio tracks in the peer connection ---
-      if (callRef.current?.peer && callRef.current.peer._pc) {
-        console.log("Replacing video and audio tracks in peer connection...");
-        const pc = callRef.current.peer._pc;
-        const senders = pc.getSenders();
-
-        const videoSender = senders.find(
-          (sender) => sender.track && sender.track.kind === "video"
-        );
-        const newVideoTrack = newStream.getVideoTracks()[0]; // --- Find and replace the audio track ---
-
-        const audioSender = senders.find(
-          // <-- Find audio sender
-          (sender) => sender.track && sender.track.kind === "audio"
-        );
-        const newAudioTrack = newStream.getAudioTracks()[0]; // <-- Get new audio track // --------------------------------------
-        if (videoSender && newVideoTrack) {
-          if (videoSender.track !== newVideoTrack) {
-            await videoSender.replaceTrack(newVideoTrack);
-            console.log("Video track replaced successfully.");
-          } else {
-            console.log("Video track already replaced, skipping replaceTrack.");
-          }
-        } else {
-          console.warn(
-            "No suitable video sender found or new video track missing."
-          ); // Fallback/Error handling for video if replace failed
-        } // --- Perform audio track replacement ---
-
-        if (audioSender && newAudioTrack) {
-          if (audioSender.track !== newAudioTrack) {
-            await audioSender.replaceTrack(newAudioTrack); // <-- Replace audio track
-            console.log("Audio track replaced successfully.");
-          } else {
-            console.log("Audio track already replaced, skipping replaceTrack.");
-          }
-        } else {
-          console.warn(
-            // <-- Warn if audio replacement failed
-            "No suitable audio sender found or new audio track missing. Audio may be lost."
-          );
-          toast.error("Could not replace audio track."); // <-- Inform the user
-        } // ----------------------------------------- // Note: If replaceTrack fails, you might need more complex renegotiation. // simple-peer handles some renegotiation automatically on `replaceTrack`, // but explicit `addTrack` or `removeTrack` might require manual signaling. // Given your current structure, replacing should be sufficient.
-      } else {
-        console.warn(
-          "Peer connection or its internal PC not available when switching camera. Stream updated locally only."
-        ); // In this case, the peer connection might be gone or not initialized correctly. // The best course might be to alert the user or attempt re-initialization, // or simply update local state as done below.
-      } // ------------------------------------------------------------------ // --- Update local state with the NEW stream --- // Stop tracks of the *old* localStream that were not stopped above (audio). // This is important to release hardware resources for the OLD stream object.
-      console.log(
-        "Stopping remaining tracks in the old local stream object..."
-      );
-      localStream.getTracks().forEach((track) => {
-        // If track wasn't stopped (i.e., it's an audio track), stop it now.
-        if (track.readyState !== "ended") {
-          console.log(
-            `Stopping leftover track: ${track.kind}, ID: ${track.id}`
-          );
-          track.stop();
-        }
-      });
-      console.log("Remaining tracks stopped.");
-
-      setLocalStream(newStream); // <-- Update local stream state with the new stream
-      setCurrentCameraId(nextDeviceId); // Attempt to update facing mode based on device info (heuristic)
-
-      const settings = newStream.getVideoTracks()[0].getSettings();
-      if (settings.facingMode) {
-        setFacingMode(settings.facingMode);
-        console.log("Facing mode updated:", settings.facingMode);
-      } else if (nextCameraInfo.label) {
-        const label = nextCameraInfo.label.toLowerCase();
-        if (label.includes("front") || label.includes("user")) {
-          setFacingMode("user");
-          console.log("Facing mode inferred from label: user");
-        } else if (label.includes("back") || label.includes("environment")) {
-          setFacingMode("environment");
-          console.log("Facing mode inferred from label: environment");
-        } else {
-          setFacingMode("user"); // Default if unable to determine
-          console.log(
-            "Could not infer facing mode from label, defaulting to user."
-          );
-        }
-      } else {
-        setFacingMode("user"); // Default if no label or settings
-        console.log(
-          "Could not infer facing mode, defaulting to user (no settings/label)."
-        );
-      } // --------------------------
-    } catch (err) {
-      console.error("Failed to switch camera:", err);
-      toast.error("Failed to switch camera."); // --- Add Robust Error Recovery ---
-
-      console.log(
-        "Attempting to recover local stream by getting a default stream..."
-      ); // If switching to the specific camera fails, try to get *any* video and audio stream
-      navigator.mediaDevices
-        .getUserMedia({ video: true, audio: true }) // IMPORTANT: Ensure audio is requested here too
-        .then((recoveredStream) => {
-          console.log(
-            "Successfully recovered a local stream:",
-            recoveredStream
-          ); // Stop tracks of the *old* localStream before setting the recovered one
-
-          if (localStream) {
-            // Ensure localStream is not null
-            localStream.getTracks().forEach((track) => {
-              if (track.readyState !== "ended") track.stop();
-            });
-          }
-
-          setLocalStream(recoveredStream); // Update local state with the recovered stream
-          toast.success("Camera switched (recovered)."); // Attempt to replace *both* video and audio tracks in the peer connection with the recovered tracks
-
-          if (callRef.current?.peer && callRef.current.peer._pc) {
-            console.log(
-              "Attempting to replace tracks with recovered stream..."
-            );
-            const pc = callRef.current.peer._pc;
-            const senders = pc.getSenders();
-
-            const videoSender = senders.find(
-              (sender) => sender.track && sender.track.kind === "video"
-            );
-            const recoveredVideoTrack = recoveredStream.getVideoTracks()[0];
-
-            const audioSender = senders.find(
-              // <-- Find audio sender in recovery
-              (sender) => sender.track && sender.track.kind === "audio"
-            );
-            const recoveredAudioTrack = recoveredStream.getAudioTracks()[0]; // <-- Get recovered audio track // Replace video track
-
-            if (videoSender && recoveredVideoTrack) {
-              if (videoSender.track !== recoveredVideoTrack) {
-                videoSender.replaceTrack(recoveredVideoTrack);
-                console.log(
-                  "Video track replaced with recovered stream track."
-                );
-              }
-            } else {
-              console.warn("Could not replace video track during recovery.");
-            } // Replace audio track during recovery
-
-            if (audioSender && recoveredAudioTrack) {
-              // <-- Replace audio track in recovery
-              if (audioSender.track !== recoveredAudioTrack) {
-                audioSender.replaceTrack(recoveredAudioTrack);
-                console.log(
-                  "Audio track replaced with recovered stream track."
-                );
-              }
-            } else {
-              console.warn("Could not replace audio track during recovery.");
-              toast.error("Audio may not be working after recovery."); // <-- Warn user
-            } // Update current camera ID and facing mode based on the recovered stream
-
-            const trackSettings = recoveredVideoTrack?.getSettings(); // Use optional chaining
-            if (trackSettings?.deviceId) {
-              // Use optional chaining
-              setCurrentCameraId(trackSettings.deviceId);
-            }
-            if (trackSettings?.facingMode) {
-              // Use optional chaining
-              setFacingMode(trackSettings.facingMode);
-            } else if (trackSettings?.deviceId) {
-              // Use optional chaining
-              // Try to infer facing mode from device list again using deviceId
-              navigator.mediaDevices.enumerateDevices().then((devices) => {
-                const device = devices.find(
-                  (d) => d.deviceId === trackSettings.deviceId
-                );
-                if (device && device.label) {
-                  const label = device.label.toLowerCase();
-                  if (label.includes("front") || label.includes("user"))
-                    setFacingMode("user");
-                  else if (
-                    label.includes("back") ||
-                    label.includes("environment")
-                  )
-                    setFacingMode("environment");
-                  else setFacingMode("user"); // Default
-                }
-              });
-            } else {
-              setFacingMode("user"); // Default if no info
-            }
-          } else {
-            console.warn(
-              "Peer connection not available during recovery attempt. Stream updated locally only."
-            ); // If the peer connection is gone during recovery, audio/video won't reach remote. // Consider ending the call. // destroyCall(); // Uncomment if you want to end the call on peer error during recovery
-          }
-        })
-        .catch((recoveryErr) => {
-          console.error(
-            "Failed to recover local stream after switch error:",
-            recoveryErr
-          );
-          toast.error("Critical error: Could not restore camera/audio."); // If recovery also fails, consider ending the call as the camera/audio is unusable
-          destroyCall(); // Automatically end call if media fails critically
-        }); // --- End Robust Error Recovery ---
-    }
-  }, [
+function Call() {
+  const {
     localStream,
-    callRef,
-    currentCameraId,
-    setLocalStream,
-    setCurrentCameraId,
-    setFacingMode,
-    destroyCall, // dependency needed for error recovery
-  ]);
+    remoteStream,
+    endCall,
+    switchCamera,
+    isSwitchingCamera,
+    isMuted = false,
+    toggleMute = () => console.log("Toggle mute"),
+    isVideoOff = false,
+    toggleVideo = () => console.log("Toggle video"),
+  } = useCall();
 
+  const localVideoRef = useRef(null);
+  const remoteVideoRef = useRef(null);
+  const [isRotating, setIsRotating] = useState(false);
+  const [callDuration, setCallDuration] = useState(0);
+  const [showControls, setShowControls] = useState(true);
+  const [isVideoSwapped, setIsVideoSwapped] = useState(false);
+
+  // State for draggable local video
+  const [localVideoDrag, setLocalVideoDrag] = useState({
+    isDragging: false,
+    position: { x: null, y: null },
+    initialPosition: { x: null, y: null },
+    offset: { x: 0, y: 0 },
+    corner: "bottom-right", // Default corner position
+  });
+
+  // Handle camera switch
+  const handleRotateClick = async () => {
+    if (!isSwitchingCamera) {
+      setIsRotating(true);
+      await switchCamera();
+      setTimeout(() => setIsRotating(false), 800);
+    }
+  };
+
+  // Call timer
   useEffect(() => {
-    // Ensure socket handlers don't rely on potentially stale state from closure
-    // Use refs or ensure callbacks are updated if dependencies change
+    let timer;
+    if (remoteStream) {
+      timer = setInterval(() => {
+        setCallDuration((prev) => prev + 1);
+      }, 1000);
+    }
+    return () => clearInterval(timer);
+  }, [remoteStream]);
 
-    const handleIncomingCall = ({ signalData, user }) => {
-      dispatch(setIsIncommingCall(true));
-      dispatch(setCallUser(user));
-      dispatch(setSignalData(signalData));
-      setOpen(true);
+  // Format call duration
+  const formatTime = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, "0")}:${secs
+      .toString()
+      .padStart(2, "0")}`;
+  };
+
+  // Auto-hide controls after inactivity
+  useEffect(() => {
+    let timeout;
+    const handleMovement = () => {
+      setShowControls(true);
+      clearTimeout(timeout);
+      timeout = setTimeout(() => setShowControls(false), 5000);
     };
 
-    const handleCallEnded = () => {
-      // Make sure destroyCall uses the latest state (useCallback handles this)
-      destroyCall();
-      navigate("/home", { replace: true });
-      toast.success("Call ended");
-    };
+    document.addEventListener("mousemove", handleMovement);
+    document.addEventListener("touchstart", handleMovement);
 
-    socket?.on("incomming-call", handleIncomingCall);
-    socket?.on("call-ended", handleCallEnded);
+    // Initial timeout
+    timeout = setTimeout(() => setShowControls(false), 5000);
 
     return () => {
-      socket?.off("incomming-call", handleIncomingCall);
-      socket?.off("call-ended", handleCallEnded);
-      // Clean up listeners for 'call-accepted' added inside initiateCall if component unmounts before acceptance
-      // socket?.off("call-accepted"); // This might be tricky depending on exact flow
+      clearTimeout(timeout);
+      document.removeEventListener("mousemove", handleMovement);
+      document.removeEventListener("touchstart", handleMovement);
     };
-  }, [socket, dispatch, destroyCall, setOpen, navigate]); // Added missing dependencies
-
-  useEffect(() => {
-    navigator.mediaDevices.enumerateDevices().then((devices) => {
-      const videoInputs = devices.filter((d) => d.kind === "videoinput");
-      setVideoDevices(videoInputs);
-
-      // Default to first camera
-      if (videoInputs.length > 0) {
-        setCurrentCameraId(videoInputs[0].deviceId);
-      }
-    });
   }, []);
 
+  // Attach streams based on swap state
+  // useEffect(() => {
+  //   if (isVideoSwapped) {
+  //     if (remoteStream && localVideoRef.current) {
+  //       localVideoRef.current.srcObject = remoteStream;
+  //     }
+  //     if (localStream && remoteVideoRef.current) {
+  //       remoteVideoRef.current.srcObject = localStream;
+  //     }
+  //   } else {
+  //     if (localStream && localVideoRef.current) {
+  //       localVideoRef.current.srcObject = localStream;
+  //     }
+  //     if (remoteStream && remoteVideoRef.current) {
+  //       remoteVideoRef.current.srcObject = remoteStream;
+  //     }
+  //   }
+
+  //   const localVideo = localVideoRef.current;
+  //   const remoteVideo = remoteVideoRef.current;
+
+  //   return () => {
+  //     if (localVideo) {
+  //       localVideo.srcObject = null;
+  //     }
+  //     if (remoteVideo) {
+  //       remoteVideo.srcObject = null;
+  //     }
+  //   };
+  // }, [localStream, remoteStream, isVideoSwapped]);
+
+  useEffect(() => {
+    if (isVideoSwapped) {
+      // When videos are swapped
+      if (remoteStream && localVideoRef.current) {
+        localVideoRef.current.srcObject = remoteStream;
+        localVideoRef.current.muted = false; // Unmute to hear remote audio
+      }
+      if (localStream && remoteVideoRef.current) {
+        remoteVideoRef.current.srcObject = localStream;
+        remoteVideoRef.current.muted = true; // Mute to prevent feedback
+      }
+    } else {
+      // Default state
+      if (localStream && localVideoRef.current) {
+        localVideoRef.current.srcObject = localStream;
+        localVideoRef.current.muted = true; // Mute local video
+      }
+      if (remoteStream && remoteVideoRef.current) {
+        remoteVideoRef.current.srcObject = remoteStream;
+        remoteVideoRef.current.muted = false; // Unmute remote video
+      }
+    }
+
+    const localVideo = localVideoRef.current;
+    const remoteVideo = remoteVideoRef.current;
+
+    return () => {
+      if (localVideo) {
+        localVideo.srcObject = null;
+      }
+      if (remoteVideo) {
+        remoteVideo.srcObject = null;
+      }
+    };
+  }, [localStream, remoteStream, isVideoSwapped]);
+  // Handle video swap
+  const handleVideoSwap = () => {
+    // Toggle the video swap state
+    setIsVideoSwapped(!isVideoSwapped);
+  };
+
+  // Draggable local video handlers
+  const handleDragStart = (e) => {
+    // Prevent default only if it's a mouse event to allow touch events to work properly
+    if (e.type === "mousedown") {
+      e.preventDefault();
+    }
+
+    const clientX = e.type === "touchstart" ? e.touches[0].clientX : e.clientX;
+    const clientY = e.type === "touchstart" ? e.touches[0].clientY : e.clientY;
+
+    const rect = e.currentTarget.getBoundingClientRect();
+
+    setLocalVideoDrag({
+      ...localVideoDrag,
+      isDragging: true,
+      initialPosition: { x: clientX, y: clientY },
+      position:
+        localVideoDrag.position.x !== null
+          ? localVideoDrag.position
+          : { x: rect.left, y: rect.top },
+    });
+  };
+
+  const handleDragMove = useCallback(
+    (e) => {
+      if (!localVideoDrag.isDragging) return;
+
+      e.preventDefault();
+      const clientX = e.type === "touchmove" ? e.touches[0].clientX : e.clientX;
+      const clientY = e.type === "touchmove" ? e.touches[0].clientY : e.clientY;
+
+      const deltaX = clientX - localVideoDrag.initialPosition.x;
+      const deltaY = clientY - localVideoDrag.initialPosition.y;
+
+      // Calculate new position
+      const newX = localVideoDrag.position.x + deltaX;
+      const newY = localVideoDrag.position.y + deltaY;
+
+      // Get window dimensions
+      const windowWidth = window.innerWidth;
+      const windowHeight = window.innerHeight;
+
+      // Get video element dimensions
+      const videoElement = e.currentTarget;
+      const videoWidth = videoElement.offsetWidth;
+      const videoHeight = videoElement.offsetHeight;
+
+      // Determine which corner the video is closest to
+      let corner;
+
+      // Calculate distances to each corner
+      const distToTopLeft = Math.sqrt(Math.pow(newX, 2) + Math.pow(newY, 2));
+      const distToTopRight = Math.sqrt(
+        Math.pow(windowWidth - newX - videoWidth, 2) + Math.pow(newY, 2)
+      );
+      const distToBottomLeft = Math.sqrt(
+        Math.pow(newX, 2) + Math.pow(windowHeight - newY - videoHeight, 2)
+      );
+      const distToBottomRight = Math.sqrt(
+        Math.pow(windowWidth - newX - videoWidth, 2) +
+          Math.pow(windowHeight - newY - videoHeight, 2)
+      );
+
+      // Find the minimum distance
+      const minDist = Math.min(
+        distToTopLeft,
+        distToTopRight,
+        distToBottomLeft,
+        distToBottomRight
+      );
+
+      if (minDist === distToTopLeft) corner = "top-left";
+      else if (minDist === distToTopRight) corner = "top-right";
+      else if (minDist === distToBottomLeft) corner = "bottom-left";
+      else corner = "bottom-right";
+
+      setLocalVideoDrag({
+        ...localVideoDrag,
+        position: { x: newX, y: newY },
+        initialPosition: { x: clientX, y: clientY },
+        corner,
+      });
+    },
+    [localVideoDrag]
+  );
+
+  const handleDragEnd = useCallback(() => {
+    if (!localVideoDrag.isDragging) return;
+
+    // Get window dimensions
+    const windowWidth = window.innerWidth;
+    const windowHeight = window.innerHeight;
+
+    // Get video element dimensions
+    const videoElement = document.querySelector(".local-video-container");
+    const videoWidth = videoElement ? videoElement.offsetWidth : 120;
+    const videoHeight = videoElement ? videoElement.offsetHeight : 160;
+
+    // Calculate final position based on corner
+    let finalX, finalY;
+
+    const padding = 24; // Padding from edges
+    const controlsHeight = 120; // Height reserved for controls at bottom
+
+    switch (localVideoDrag.corner) {
+      case "top-left":
+        finalX = padding;
+        finalY = padding;
+        break;
+      case "top-right":
+        finalX = windowWidth - videoWidth - padding;
+        finalY = padding;
+        break;
+      case "bottom-left":
+        finalX = padding;
+        finalY = windowHeight - videoHeight - controlsHeight;
+        break;
+      case "bottom-right":
+      default:
+        finalX = windowWidth - videoWidth - padding;
+        finalY = windowHeight - videoHeight - controlsHeight;
+        break;
+    }
+
+    setLocalVideoDrag({
+      ...localVideoDrag,
+      isDragging: false,
+      position: { x: finalX, y: finalY },
+      corner: localVideoDrag.corner,
+    });
+  }, [localVideoDrag]);
+
+  // Add event listeners for drag
+  useEffect(() => {
+    if (localVideoDrag.isDragging) {
+      window.addEventListener("mousemove", handleDragMove);
+      window.addEventListener("mouseup", handleDragEnd);
+      window.addEventListener("touchmove", handleDragMove, { passive: false });
+      window.addEventListener("touchend", handleDragEnd);
+    }
+
+    return () => {
+      window.removeEventListener("mousemove", handleDragMove);
+      window.removeEventListener("mouseup", handleDragEnd);
+      window.removeEventListener("touchmove", handleDragMove);
+      window.removeEventListener("touchend", handleDragEnd);
+    };
+  }, [handleDragEnd, handleDragMove, localVideoDrag]);
+
+  // Set initial position on first render
+  useEffect(() => {
+    if (localVideoDrag.position.x === null) {
+      // Default to bottom-right corner
+      const windowWidth = window.innerWidth;
+      const windowHeight = window.innerHeight;
+      const videoWidth = 120; // Default width
+      const videoHeight = 160; // Default height (3:4 aspect ratio)
+      const padding = 24; // Padding
+      const controlsHeight = 120; // Height reserved for controls
+
+      setLocalVideoDrag({
+        ...localVideoDrag,
+        position: {
+          x: windowWidth - videoWidth - padding,
+          y: windowHeight - videoHeight - controlsHeight,
+        },
+        corner: "bottom-right",
+      });
+    }
+  }, [localVideoDrag]);
+
+  // Handle window resize
+  useEffect(() => {
+    const handleResize = () => {
+      if (localVideoDrag.position.x !== null) {
+        handleDragEnd();
+      }
+    };
+
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, [localVideoDrag, handleDragEnd]);
+
+  // Calculate local video position styles
+  const getLocalVideoStyle = () => {
+    if (localVideoDrag.position.x === null) {
+      return {};
+    }
+
+    return {
+      position: "fixed",
+      left: `${localVideoDrag.position.x}px`,
+      top: `${localVideoDrag.position.y}px`,
+      zIndex: 20,
+      touchAction: "none",
+      transition: localVideoDrag.isDragging ? "none" : "all 0.3s ease-out",
+    };
+  };
+
   return (
-    <CallContext.Provider
-      value={{
-        // Pass state directly
-        localStream,
-        remoteStream,
-        // Pass functions
-        initiateCall,
-        answerCall,
-        endCall,
-        rejectCall,
-        callRef,
-        open,
-        setOpen,
-        handleOpen,
-        handleClose,
-        switchCamera,
-        videoDevices,
-        currentCameraId,
-        setCurrentCameraId,
-        setVideoDevices,
-        facingMode,
-      }}
+    <div
+      className="relative h-full w-full flex flex-col bg-[#111b21] overflow-hidden"
+      onMouseMove={() => setShowControls(true)}
+      onTouchStart={() => setShowControls(true)}
     >
-      {children}
-    </CallContext.Provider>
+      {/* Call info bar */}
+      <div
+        className={`absolute top-0 left-0 right-0 z-10 bg-black/40 backdrop-blur-sm transition-opacity duration-300 ${
+          showControls ? "opacity-100" : "opacity-0"
+        }`}
+      >
+        <div className="flex justify-between items-center px-4 py-3">
+          <div className="flex items-center gap-2">
+            <div className="h-2.5 w-2.5 rounded-full bg-green-500 animate-pulse"></div>
+            <span className="text-white text-sm font-medium">
+              WhatsApp Call
+            </span>
+          </div>
+          <div className="text-white text-sm font-medium">
+            {remoteStream ? formatTime(callDuration) : "Connecting..."}
+          </div>
+        </div>
+      </div>
+
+      {/* Main video area */}
+      <div className="flex-grow relative w-full">
+        {/* Remote video (main view) */}
+        <div className="absolute inset-0 bg-[#111b21] flex items-center justify-center">
+          <video
+            className="h-full w-full object-contain"
+            ref={remoteVideoRef}
+            autoPlay
+            playsInline
+          />
+
+          {/* Loading state for remote video */}
+          {localStream && !remoteStream && !isSwitchingCamera && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#111b21]/90 text-white">
+              <div className="w-16 h-16 rounded-full bg-[#00a884] flex items-center justify-center mb-4">
+                <Spinner
+                  size={32}
+                  className="animate-spin text-white"
+                  weight="bold"
+                />
+              </div>
+              <div className="text-lg font-medium">Connecting...</div>
+              <div className="mt-2 text-[#8696a0] text-sm">
+                End-to-end encrypted
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Local video (draggable picture-in-picture) */}
+        <div
+          className={`local-video-container
+            w-[30%] min-w-[100px] max-w-[150px] aspect-[3/4] rounded-lg overflow-hidden shadow-xl 
+            border-2 border-[#00a884] 
+            transition-all duration-300 z-20 cursor-move touch-none
+            ${showControls ? "opacity-100" : "opacity-90"}`}
+          style={getLocalVideoStyle()}
+          onMouseDown={handleDragStart}
+          onTouchStart={handleDragStart}
+        >
+          <div className="h-full w-full relative" onClick={handleVideoSwap}>
+            <video
+              className="h-full w-full object-contain bg-[#1f2c34]"
+              ref={localVideoRef}
+              autoPlay
+              playsInline
+              muted
+            />
+
+            {/* Loading state for local video */}
+            {(!localStream && !remoteStream) || isSwitchingCamera ? (
+              <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#1f2c34]/90 text-white">
+                {isSwitchingCamera ? (
+                  <>
+                    <Spinner
+                      size={20}
+                      className="animate-spin text-[#00a884] mb-1"
+                      weight="bold"
+                    />
+                    <span className="text-xs">Switching...</span>
+                  </>
+                ) : (
+                  <Spinner
+                    size={20}
+                    className="animate-spin text-[#00a884]"
+                    weight="bold"
+                  />
+                )}
+              </div>
+            ) : null}
+
+            {/* Video off indicator */}
+            {isVideoOff && localStream && !isVideoSwapped && (
+              <div className="absolute inset-0 flex items-center justify-center bg-[#1f2c34] text-white">
+                <div className="h-12 w-12 rounded-full bg-[#00a884]/20 flex items-center justify-center">
+                  <span className="text-sm font-bold">You</span>
+                </div>
+              </div>
+            )}
+
+            {/* Swap indicator */}
+            {isVideoSwapped && (
+              <div className="absolute top-1 right-1 bg-black/50 rounded-full p-1">
+                <ArrowsCounterClockwise
+                  size={12}
+                  weight="bold"
+                  className="text-white"
+                />
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Controls - WhatsApp style */}
+      <div
+        className={`absolute bottom-0 left-0 right-0 transition-all duration-300 pb-6 ${
+          showControls
+            ? "translate-y-0 opacity-100"
+            : "translate-y-16 opacity-0"
+        }`}
+      >
+        <div className="flex flex-col items-center">
+          {/* Main controls */}
+          <div className="flex items-center justify-center gap-4 sm:gap-6">
+            {/* Mic toggle */}
+            <button
+              onClick={toggleMute}
+              className={`${
+                isMuted ? "bg-[#ea4335]" : "bg-[#202c33]"
+              } text-white p-3 h-12 w-12 sm:h-14 sm:w-14 rounded-full flex items-center justify-center shadow-lg transition-transform active:scale-95`}
+            >
+              {isMuted ? (
+                <MicrophoneSlash className="h-6 w-6" weight="fill" />
+              ) : (
+                <Microphone className="h-6 w-6" weight="fill" />
+              )}
+            </button>
+
+            {/* Camera switch button - Moved to main controls */}
+            <button
+              onClick={handleRotateClick}
+              disabled={isSwitchingCamera}
+              className="bg-[#202c33] text-white p-3 h-12 w-12 sm:h-14 sm:w-14 rounded-full flex items-center justify-center disabled:opacity-50 shadow-lg transition-transform active:scale-95"
+              title="Switch camera (front/back)"
+            >
+              <ArrowsClockwise
+                className={`h-6 w-6 ${isRotating ? "animate-spin" : ""}`}
+                weight="fill"
+              />
+            </button>
+
+            {/* End call */}
+            <button
+              onClick={endCall}
+              className="bg-[#ea4335] text-white p-3 h-14 w-14 sm:h-16 sm:w-16 rounded-full flex items-center justify-center shadow-lg transition-transform active:scale-95"
+            >
+              <PhoneSlash className="h-7 w-7 sm:h-8 sm:w-8" weight="fill" />
+            </button>
+
+            {/* Video toggle */}
+            <button
+              onClick={toggleVideo}
+              className={`${
+                isVideoOff ? "bg-[#ea4335]" : "bg-[#202c33]"
+              } text-white p-3 h-12 w-12 sm:h-14 sm:w-14 rounded-full flex items-center justify-center shadow-lg transition-transform active:scale-95`}
+            >
+              {isVideoOff ? (
+                <VideoCameraSlash className="h-6 w-6" weight="fill" />
+              ) : (
+                <VideoCamera className="h-6 w-6" weight="fill" />
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* End-to-end encrypted label */}
+      <div
+        className={`absolute bottom-2 left-0 right-0 text-center text-xs text-[#8696a0] transition-opacity duration-300 ${
+          showControls ? "opacity-100" : "opacity-0"
+        }`}
+      >
+        End-to-end encrypted
+      </div>
+    </div>
   );
 }
 
-export default CallProvider;
+export default Call;
