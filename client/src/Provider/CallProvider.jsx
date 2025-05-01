@@ -13,6 +13,7 @@ import {
 import { CallContext } from "@/context/CallContext";
 import { useSocket } from "@/hooks/socket";
 import toast from "react-hot-toast";
+import { isMobileDevice } from "@/lib/utils";
 
 function CallProvider({ children }) {
   const callRef = useRef(null);
@@ -22,6 +23,7 @@ function CallProvider({ children }) {
   const [open, setOpen] = React.useState(false);
   const [videoDevices, setVideoDevices] = useState([]);
   const [currentCameraId, setCurrentCameraId] = useState(null);
+  const [facingMode, setFacingMode] = useState("user"); // 'user' = front, 'environment' = rear
 
   const { callUser, signalData: userSignalData } = useSelector(
     (state) => state.call
@@ -172,49 +174,129 @@ function CallProvider({ children }) {
     // socket?.emit("reject-call", { userId: callUser?._id });
   }, [dispatch /*, socket, callUser*/]); // Add dependencies if using socket here
 
+  // const switchCamera = async () => {
+  //   if (!localStream) return;
+
+  //   // Get the list of video devices again (in case it changes)
+  //   const devices = await navigator.mediaDevices.enumerateDevices();
+  //   const videoInputs = devices.filter((d) => d.kind === "videoinput");
+
+  //   if (videoInputs.length < 2) return alert("No alternate camera found.");
+
+  //   // Find next camera
+  //   const currentIndex = videoInputs.findIndex(
+  //     (d) => d.deviceId === currentCameraId
+  //   );
+  //   const nextIndex = (currentIndex + 1) % videoInputs.length;
+  //   const nextDeviceId = videoInputs[nextIndex].deviceId;
+
+  //   try {
+  //     const newStream = await navigator.mediaDevices.getUserMedia({
+  //       video: { deviceId: { exact: nextDeviceId } },
+  //       audio: false, // Keep existing audio
+  //     });
+
+  //     // Replace the video track in the peer connection
+  //     const newVideoTrack = newStream.getVideoTracks()[0];
+  //     const oldVideoTrack = localStream.getVideoTracks()[0];
+
+  //     if (callRef.current?.peer && callRef.current.peer.streams[0]) {
+  //       const sender = callRef.current.peer._pc
+  //         .getSenders()
+  //         .find((s) => s.track?.kind === "video");
+
+  //       if (sender) {
+  //         sender.replaceTrack(newVideoTrack);
+  //       }
+  //     }
+
+  //     // Stop old video track and update local stream
+  //     oldVideoTrack.stop();
+  //     localStream.removeTrack(oldVideoTrack);
+  //     localStream.addTrack(newVideoTrack);
+  //     setCurrentCameraId(nextDeviceId);
+  //   } catch (err) {
+  //     console.error("Failed to switch camera:", err);
+  //   }
+  // };
+
   const switchCamera = async () => {
     if (!localStream) return;
 
-    // Get the list of video devices again (in case it changes)
-    const devices = await navigator.mediaDevices.enumerateDevices();
-    const videoInputs = devices.filter((d) => d.kind === "videoinput");
+    if (isMobileDevice()) {
+      // MOBILE: Use facingMode toggle
+      const newFacingMode = facingMode === "user" ? "environment" : "user";
 
-    if (videoInputs.length < 2) return alert("No alternate camera found.");
+      try {
+        const newStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { exact: newFacingMode } },
+          audio: false,
+        });
 
-    // Find next camera
-    const currentIndex = videoInputs.findIndex(
-      (d) => d.deviceId === currentCameraId
-    );
-    const nextIndex = (currentIndex + 1) % videoInputs.length;
-    const nextDeviceId = videoInputs[nextIndex].deviceId;
+        const newVideoTrack = newStream.getVideoTracks()[0];
+        const oldVideoTrack = localStream.getVideoTracks()[0];
 
-    try {
-      const newStream = await navigator.mediaDevices.getUserMedia({
-        video: { deviceId: { exact: nextDeviceId } },
-        audio: false, // Keep existing audio
-      });
-
-      // Replace the video track in the peer connection
-      const newVideoTrack = newStream.getVideoTracks()[0];
-      const oldVideoTrack = localStream.getVideoTracks()[0];
-
-      if (callRef.current?.peer && callRef.current.peer.streams[0]) {
-        const sender = callRef.current.peer._pc
-          .getSenders()
-          .find((s) => s.track?.kind === "video");
+        const sender = callRef.current?.peer?._pc
+          ?.getSenders()
+          ?.find((s) => s.track?.kind === "video");
 
         if (sender) {
-          sender.replaceTrack(newVideoTrack);
+          await sender.replaceTrack(newVideoTrack);
         }
-      }
 
-      // Stop old video track and update local stream
-      oldVideoTrack.stop();
-      localStream.removeTrack(oldVideoTrack);
-      localStream.addTrack(newVideoTrack);
-      setCurrentCameraId(nextDeviceId);
-    } catch (err) {
-      console.error("Failed to switch camera:", err);
+        oldVideoTrack.stop();
+
+        const updatedStream = new MediaStream([
+          newVideoTrack,
+          ...localStream.getAudioTracks(),
+        ]);
+
+        setLocalStream(updatedStream);
+        setFacingMode(newFacingMode);
+      } catch (err) {
+        console.error("Mobile camera switch failed:", err);
+      }
+    } else {
+      // DESKTOP: Cycle through available devices
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const videoInputs = devices.filter((d) => d.kind === "videoinput");
+
+      if (videoInputs.length < 2) return alert("No alternate camera found.");
+
+      const currentIndex = videoInputs.findIndex(
+        (d) => d.deviceId === currentCameraId
+      );
+      const nextIndex = (currentIndex + 1) % videoInputs.length;
+      const nextDeviceId = videoInputs[nextIndex].deviceId;
+
+      try {
+        const newStream = await navigator.mediaDevices.getUserMedia({
+          video: { deviceId: { exact: nextDeviceId } },
+          audio: false,
+        });
+
+        const newVideoTrack = newStream.getVideoTracks()[0];
+        const oldVideoTrack = localStream.getVideoTracks()[0];
+
+        const sender = callRef.current?.peer?._pc
+          ?.getSenders()
+          ?.find((s) => s.track?.kind === "video");
+
+        if (sender) {
+          await sender.replaceTrack(newVideoTrack);
+        }
+
+        oldVideoTrack.stop();
+        const updatedStream = new MediaStream([
+          newVideoTrack,
+          ...localStream.getAudioTracks(),
+        ]);
+
+        setLocalStream(updatedStream);
+        setCurrentCameraId(nextDeviceId);
+      } catch (err) {
+        console.error("Desktop camera switch failed:", err);
+      }
     }
   };
 
@@ -280,6 +362,8 @@ function CallProvider({ children }) {
         currentCameraId,
         setCurrentCameraId,
         setVideoDevices,
+        facingMode,
+        setFacingMode,
       }}
     >
       {children}
