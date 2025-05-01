@@ -45,7 +45,7 @@ function Call() {
       <div className="flex md:flex-row flex-col w-full items-center justify-center md:gap-8 gap-3 md:p-8 px-2 py-3 flex-grow bg-black">
         <div className="relative md:w-1/2 w-auto md:h-full h-[45%] rounded-2xl bg-white">
           <video
-            className="size-full object-cover bg-black h-full"
+            className="size-full object-cover bg-black "
             ref={localVideoRef}
             autoPlay
             playsInline
@@ -60,7 +60,7 @@ function Call() {
 
         <div className="relative md:w-1/2 w-auto md:h-full h-[45%] rounded-2xl bg-white">
           <video
-            className="size-full object-cover bg-black h-full"
+            className="size-full object-cover bg-black "
             ref={remoteVideoRef}
             autoPlay
             playsInline

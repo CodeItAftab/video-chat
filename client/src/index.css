@@ -128,3 +128,23 @@
 * {
   overflow: hidden;
 }
+
+@keyframes spin-once {
+  0% {
+    transform: rotate(0deg);
+  }
+
+  100% {
+    transform: rotate(180deg);
+  }
+}
+
+.animate-once-spin {
+  animation: spin-once 0.3s linear;
+  /* Rotate once in 1 second */
+}
+
+.App {
+  height: 100svh;
+  width: 100svw;
+}
