@@ -171,11 +171,264 @@ function CallProvider({ children }) {
     dispatch(clearCallState());
     // Optionally inform the caller via socket
     // socket?.emit("reject-call", { userId: callUser?._id });
-  }, [dispatch /*, socket, callUser*/]); // Add dependencies if using socket here
+  }, [dispatch /*, socket, callUser*/]);
 
-  // Inside your CallProvider function component
+  // const switchCamera = useCallback(async () => {
+  //   // --- Start Device Check (Keep this as requested) ---
+  //   const userAgent = navigator.userAgent;
+  //   const hasTouch = navigator.maxTouchPoints > 0;
+  //   const isMobileOrTabletDevice =
+  //     /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+  //       userAgent
+  //     ) || hasTouch;
 
-  // Inside your CallProvider function component
+  //   if (!isMobileOrTabletDevice) {
+  //     console.log("Camera switching is only enabled on mobile/tablet devices.");
+  //     toast.success("Camera switching is only available on mobile or tablets.");
+
+  //     return;
+  //   }
+  //   // --- End Device Check ---
+
+  //   if (!localStream) {
+  //     console.warn("Cannot switch camera: Local stream not available.");
+  //     toast.error("Local stream not available for switching.");
+  //     return;
+  //   }
+
+  //   try {
+  //     // Enumerate devices again to ensure we have the latest list and labels
+  //     const devices = await navigator.mediaDevices.enumerateDevices();
+  //     const videoInputs = devices.filter((d) => d.kind === "videoinput");
+
+  //     if (videoInputs.length < 2) {
+  //       console.log("No alternate camera found.");
+  //       toast.success("No alternate camera found.");
+  //       return;
+  //     }
+
+  //     // Find the index of the current camera and determine the next
+  //     const currentIndex = videoInputs.findIndex(
+  //       (d) => d.deviceId === currentCameraId
+  //     );
+  //     const nextIndex = (currentIndex + 1) % videoInputs.length;
+  //     const nextCameraInfo = videoInputs[nextIndex];
+  //     const nextDeviceId = nextCameraInfo.deviceId;
+
+  //     // --- Stop all tracks in the *current* local stream ---
+  //     console.log("Stopping current local stream tracks...");
+  //     localStream.getTracks().forEach((track) => {
+  //       // Check if the track is still active before stopping
+  //       if (track.readyState !== "ended") {
+  //         console.log(`Stopping track: ${track.kind}, ID: ${track.id}`);
+  //         track.stop();
+  //       } else {
+  //         console.log(`Track already ended: ${track.kind}, ID: ${track.id}`);
+  //       }
+  //     });
+  //     console.log("Current local stream tracks stopped.");
+  //     // Give a very small moment for tracks to potentially release (heuristic, not guaranteed cross-browser)
+  //     // await new Promise(resolve => setTimeout(resolve, 50)); // Optional: uncomment if still seeing issues, but test without first.
+  //     // ---------------------------------------------------
+
+  //     // --- Get the *new* stream from the next camera ---
+  //     console.log(
+  //       `Attempting to get new stream from device ID: ${nextDeviceId}`
+  //     );
+  //     const newStream = await navigator.mediaDevices.getUserMedia({
+  //       video: { deviceId: { exact: nextDeviceId } },
+  //       audio: true, // Request audio as well to maintain the stream structure
+  //     });
+  //     console.log("New stream obtained:", newStream);
+  //     // ---------------------------------------------
+
+  //     // --- Replace the video track in the peer connection ---
+  //     if (callRef.current?.peer && callRef.current.peer._pc) {
+  //       console.log("Replacing video track in peer connection...");
+  //       const pc = callRef.current.peer._pc;
+  //       const senders = pc.getSenders();
+  //       const videoSender = senders.find(
+  //         (sender) => sender.track && sender.track.kind === "video"
+  //       );
+  //       const newVideoTrack = newStream.getVideoTracks()[0];
+
+  //       if (videoSender && newVideoTrack) {
+  //         // Ensure the sender's track isn't already the new one (shouldn't happen in switch but good check)
+  //         if (videoSender.track !== newVideoTrack) {
+  //           await videoSender.replaceTrack(newVideoTrack);
+  //           console.log("Video track replaced successfully.");
+  //         } else {
+  //           console.log("Track already replaced, skipping replaceTrack.");
+  //         }
+  //       } else {
+  //         console.warn(
+  //           "No suitable video sender found or new video track missing. Attempting to add tracks."
+  //         );
+  //         // If replaceTrack isn't possible, try adding the new tracks.
+  //         // This might happen if video was initially off or sender is gone.
+  //         // Be cautious: adding tracks might require renegotiation depending on SimplePeer/browser.
+  //         newStream.getTracks().forEach((track) => {
+  //           // Avoid adding the same track multiple times
+  //           const existingSender = senders.find(
+  //             (sender) => sender.track === track
+  //           );
+  //           if (!existingSender) {
+  //             pc.addTrack(track, newStream); // Note: addTrack might need the stream as second arg in some libraries/specs
+  //             console.log(`Added new track to peer connection: ${track.kind}`);
+  //           } else {
+  //             console.log(
+  //               `Track already has a sender, skipping addTrack: ${track.kind}`
+  //             );
+  //           }
+  //         });
+  //         console.log("New tracks processed for peer connection.");
+  //       }
+  //     } else {
+  //       console.warn(
+  //         "Peer connection or its internal PC not available when switching camera. Stream updated locally only."
+  //       );
+  //     }
+  //     // ------------------------------------------------------
+
+  //     // --- Update local state ---
+  //     setLocalStream(newStream);
+  //     setCurrentCameraId(nextDeviceId);
+
+  //     // Attempt to update facing mode based on device info (heuristic)
+  //     const settings = newStream.getVideoTracks()[0].getSettings();
+  //     if (settings.facingMode) {
+  //       setFacingMode(settings.facingMode);
+  //       console.log("Facing mode updated:", settings.facingMode);
+  //     } else if (nextCameraInfo.label) {
+  //       // Fallback to checking label if facingMode is not directly available in settings
+  //       const label = nextCameraInfo.label.toLowerCase();
+  //       if (label.includes("front") || label.includes("user")) {
+  //         setFacingMode("user");
+  //         console.log("Facing mode inferred from label: user");
+  //       } else if (label.includes("back") || label.includes("environment")) {
+  //         setFacingMode("environment");
+  //         console.log("Facing mode inferred from label: environment");
+  //       } else {
+  //         setFacingMode("user"); // Default if unable to determine
+  //         console.log(
+  //           "Could not infer facing mode from label, defaulting to user."
+  //         );
+  //       }
+  //     } else {
+  //       setFacingMode("user"); // Default if no label or settings
+  //       console.log(
+  //         "Could not infer facing mode, defaulting to user (no settings/label)."
+  //       );
+  //     }
+  //     // --------------------------
+  //   } catch (err) {
+  //     console.error("Failed to switch camera:", err);
+  //     toast.error("Failed to switch camera.");
+
+  //     // --- Add Robust Error Recovery ---
+  //     console.log(
+  //       "Attempting to recover local stream by getting a default stream..."
+  //     );
+  //     // If switching to the specific camera fails, try to get *any* video and audio stream
+  //     navigator.mediaDevices
+  //       .getUserMedia({ video: true, audio: true })
+  //       .then((recoveredStream) => {
+  //         console.log(
+  //           "Successfully recovered a local stream:",
+  //           recoveredStream
+  //         );
+  //         setLocalStream(recoveredStream); // Update local state with the recovered stream
+  //         toast.success("Camera switched (recovered).");
+
+  //         // Attempt to replace the track in the peer connection with the recovered track
+  //         if (callRef.current?.peer && callRef.current.peer._pc) {
+  //           console.log("Attempting to replace track with recovered stream...");
+  //           const pc = callRef.current.peer._pc;
+  //           const senders = pc.getSenders();
+  //           const videoSender = senders.find(
+  //             (sender) => sender.track && sender.track.kind === "video"
+  //           );
+  //           const recoveredVideoTrack = recoveredStream.getVideoTracks()[0];
+
+  //           if (videoSender && recoveredVideoTrack) {
+  //             if (videoSender.track !== recoveredVideoTrack) {
+  //               videoSender.replaceTrack(recoveredVideoTrack);
+  //               console.log(
+  //                 "Video track replaced with recovered stream track."
+  //               );
+  //             } else {
+  //               console.log("Recovered track is already the current track.");
+  //             }
+
+  //             // Update current camera ID and facing mode based on the recovered stream
+  //             const trackSettings = recoveredVideoTrack.getSettings();
+  //             if (trackSettings.deviceId) {
+  //               setCurrentCameraId(trackSettings.deviceId);
+  //             }
+  //             if (trackSettings.facingMode) {
+  //               setFacingMode(trackSettings.facingMode);
+  //             } else if (trackSettings.deviceId) {
+  //               // Try to infer facing mode from device list again using deviceId
+  //               navigator.mediaDevices.enumerateDevices().then((devices) => {
+  //                 const device = devices.find(
+  //                   (d) => d.deviceId === trackSettings.deviceId
+  //                 );
+  //                 if (device && device.label) {
+  //                   const label = device.label.toLowerCase();
+  //                   if (label.includes("front") || label.includes("user"))
+  //                     setFacingMode("user");
+  //                   else if (
+  //                     label.includes("back") ||
+  //                     label.includes("environment")
+  //                   )
+  //                     setFacingMode("environment");
+  //                   else setFacingMode("user"); // Default
+  //                 }
+  //               });
+  //             } else {
+  //               setFacingMode("user"); // Default if no info
+  //             }
+  //           } else {
+  //             console.warn(
+  //               "Could not find video sender or recovered video track to replace. Attempting to add recovered tracks."
+  //             );
+  //             // Fallback: just add the tracks from the recovered stream
+  //             recoveredStream.getTracks().forEach((track) => {
+  //               const existingSender = senders.find(
+  //                 (sender) => sender.track === track
+  //               );
+  //               if (!existingSender) {
+  //                 pc.addTrack(track, recoveredStream);
+  //                 console.log(`Added recovered track: ${track.kind}`);
+  //               }
+  //             });
+  //           }
+  //         } else {
+  //           console.warn(
+  //             "Peer connection not available during recovery attempt. Stream updated locally only."
+  //           );
+  //         }
+  //       })
+  //       .catch((recoveryErr) => {
+  //         console.error(
+  //           "Failed to recover local stream after switch error:",
+  //           recoveryErr
+  //         );
+  //         toast.error("Critical error: Could not restore camera.");
+  //         // If recovery also fails, consider ending the call as the camera is unusable
+  //         destroyCall(); // Automatically end call if camera fails critically
+  //       });
+  //     // --- End Robust Error Recovery ---
+  //   }
+  // }, [
+  //   localStream,
+  //   callRef,
+  //   currentCameraId,
+  //   setLocalStream,
+  //   setCurrentCameraId,
+  //   setFacingMode,
+  //   destroyCall,
+  // ]); // Added destroyCall dependency for error recovery
 
   const switchCamera = useCallback(async () => {
     // --- Start Device Check (Keep this as requested) ---
@@ -189,11 +442,8 @@ function CallProvider({ children }) {
     if (!isMobileOrTabletDevice) {
       console.log("Camera switching is only enabled on mobile/tablet devices.");
       toast.success("Camera switching is only available on mobile or tablets.");
-
       return;
-    }
-    // --- End Device Check ---
-
+    } // --- End Device Check ---
     if (!localStream) {
       console.warn("Cannot switch camera: Local stream not available.");
       toast.error("Local stream not available for switching.");
@@ -209,102 +459,103 @@ function CallProvider({ children }) {
         console.log("No alternate camera found.");
         toast.success("No alternate camera found.");
         return;
-      }
+      } // Find the index of the current camera and determine the next
 
-      // Find the index of the current camera and determine the next
       const currentIndex = videoInputs.findIndex(
         (d) => d.deviceId === currentCameraId
       );
       const nextIndex = (currentIndex + 1) % videoInputs.length;
       const nextCameraInfo = videoInputs[nextIndex];
-      const nextDeviceId = nextCameraInfo.deviceId;
+      const nextDeviceId = nextCameraInfo.deviceId; // --- Stop only the VIDEO track(s) in the *current* local stream ---
 
-      // --- Stop all tracks in the *current* local stream ---
-      console.log("Stopping current local stream tracks...");
-      localStream.getTracks().forEach((track) => {
-        // Check if the track is still active before stopping
+      console.log("Stopping current local stream VIDEO tracks...");
+      localStream.getVideoTracks().forEach((track) => {
+        // <-- Changed to getVideoTracks()
         if (track.readyState !== "ended") {
-          console.log(`Stopping track: ${track.kind}, ID: ${track.id}`);
+          console.log(`Stopping video track: ${track.id}`);
           track.stop();
         } else {
-          console.log(`Track already ended: ${track.kind}, ID: ${track.id}`);
+          console.log(`Video track already ended: ${track.id}`);
         }
       });
-      console.log("Current local stream tracks stopped.");
-      // Give a very small moment for tracks to potentially release (heuristic, not guaranteed cross-browser)
-      // await new Promise(resolve => setTimeout(resolve, 50)); // Optional: uncomment if still seeing issues, but test without first.
-      // ---------------------------------------------------
-
-      // --- Get the *new* stream from the next camera ---
+      console.log("Current local stream VIDEO tracks stopped."); // ----------------------------------------------------------------- // --- Get the *new* stream from the next camera (include audio) ---
       console.log(
         `Attempting to get new stream from device ID: ${nextDeviceId}`
       );
       const newStream = await navigator.mediaDevices.getUserMedia({
         video: { deviceId: { exact: nextDeviceId } },
-        audio: true, // Request audio as well to maintain the stream structure
+        audio: true, // IMPORTANT: Ensure audio is requested in the new stream
       });
-      console.log("New stream obtained:", newStream);
-      // ---------------------------------------------
-
-      // --- Replace the video track in the peer connection ---
+      console.log("New stream obtained:", newStream); // ------------------------------------------------------------------ // --- Replace the video and audio tracks in the peer connection ---
       if (callRef.current?.peer && callRef.current.peer._pc) {
-        console.log("Replacing video track in peer connection...");
+        console.log("Replacing video and audio tracks in peer connection...");
         const pc = callRef.current.peer._pc;
         const senders = pc.getSenders();
+
         const videoSender = senders.find(
           (sender) => sender.track && sender.track.kind === "video"
         );
-        const newVideoTrack = newStream.getVideoTracks()[0];
+        const newVideoTrack = newStream.getVideoTracks()[0]; // --- Find and replace the audio track ---
 
+        const audioSender = senders.find(
+          // <-- Find audio sender
+          (sender) => sender.track && sender.track.kind === "audio"
+        );
+        const newAudioTrack = newStream.getAudioTracks()[0]; // <-- Get new audio track // --------------------------------------
         if (videoSender && newVideoTrack) {
-          // Ensure the sender's track isn't already the new one (shouldn't happen in switch but good check)
           if (videoSender.track !== newVideoTrack) {
             await videoSender.replaceTrack(newVideoTrack);
             console.log("Video track replaced successfully.");
           } else {
-            console.log("Track already replaced, skipping replaceTrack.");
+            console.log("Video track already replaced, skipping replaceTrack.");
           }
         } else {
           console.warn(
-            "No suitable video sender found or new video track missing. Attempting to add tracks."
+            "No suitable video sender found or new video track missing."
+          ); // Fallback/Error handling for video if replace failed
+        } // --- Perform audio track replacement ---
+
+        if (audioSender && newAudioTrack) {
+          if (audioSender.track !== newAudioTrack) {
+            await audioSender.replaceTrack(newAudioTrack); // <-- Replace audio track
+            console.log("Audio track replaced successfully.");
+          } else {
+            console.log("Audio track already replaced, skipping replaceTrack.");
+          }
+        } else {
+          console.warn(
+            // <-- Warn if audio replacement failed
+            "No suitable audio sender found or new audio track missing. Audio may be lost."
           );
-          // If replaceTrack isn't possible, try adding the new tracks.
-          // This might happen if video was initially off or sender is gone.
-          // Be cautious: adding tracks might require renegotiation depending on SimplePeer/browser.
-          newStream.getTracks().forEach((track) => {
-            // Avoid adding the same track multiple times
-            const existingSender = senders.find(
-              (sender) => sender.track === track
-            );
-            if (!existingSender) {
-              pc.addTrack(track, newStream); // Note: addTrack might need the stream as second arg in some libraries/specs
-              console.log(`Added new track to peer connection: ${track.kind}`);
-            } else {
-              console.log(
-                `Track already has a sender, skipping addTrack: ${track.kind}`
-              );
-            }
-          });
-          console.log("New tracks processed for peer connection.");
-        }
+          toast.error("Could not replace audio track."); // <-- Inform the user
+        } // ----------------------------------------- // Note: If replaceTrack fails, you might need more complex renegotiation. // simple-peer handles some renegotiation automatically on `replaceTrack`, // but explicit `addTrack` or `removeTrack` might require manual signaling. // Given your current structure, replacing should be sufficient.
       } else {
         console.warn(
           "Peer connection or its internal PC not available when switching camera. Stream updated locally only."
-        );
-      }
-      // ------------------------------------------------------
+        ); // In this case, the peer connection might be gone or not initialized correctly. // The best course might be to alert the user or attempt re-initialization, // or simply update local state as done below.
+      } // ------------------------------------------------------------------ // --- Update local state with the NEW stream --- // Stop tracks of the *old* localStream that were not stopped above (audio). // This is important to release hardware resources for the OLD stream object.
+      console.log(
+        "Stopping remaining tracks in the old local stream object..."
+      );
+      localStream.getTracks().forEach((track) => {
+        // If track wasn't stopped (i.e., it's an audio track), stop it now.
+        if (track.readyState !== "ended") {
+          console.log(
+            `Stopping leftover track: ${track.kind}, ID: ${track.id}`
+          );
+          track.stop();
+        }
+      });
+      console.log("Remaining tracks stopped.");
 
-      // --- Update local state ---
-      setLocalStream(newStream);
-      setCurrentCameraId(nextDeviceId);
+      setLocalStream(newStream); // <-- Update local stream state with the new stream
+      setCurrentCameraId(nextDeviceId); // Attempt to update facing mode based on device info (heuristic)
 
-      // Attempt to update facing mode based on device info (heuristic)
       const settings = newStream.getVideoTracks()[0].getSettings();
       if (settings.facingMode) {
         setFacingMode(settings.facingMode);
         console.log("Facing mode updated:", settings.facingMode);
       } else if (nextCameraInfo.label) {
-        // Fallback to checking label if facingMode is not directly available in settings
         const label = nextCameraInfo.label.toLowerCase();
         if (label.includes("front") || label.includes("user")) {
           setFacingMode("user");
@@ -323,36 +574,49 @@ function CallProvider({ children }) {
         console.log(
           "Could not infer facing mode, defaulting to user (no settings/label)."
         );
-      }
-      // --------------------------
+      } // --------------------------
     } catch (err) {
       console.error("Failed to switch camera:", err);
-      toast.error("Failed to switch camera.");
+      toast.error("Failed to switch camera."); // --- Add Robust Error Recovery ---
 
-      // --- Add Robust Error Recovery ---
       console.log(
         "Attempting to recover local stream by getting a default stream..."
-      );
-      // If switching to the specific camera fails, try to get *any* video and audio stream
+      ); // If switching to the specific camera fails, try to get *any* video and audio stream
       navigator.mediaDevices
-        .getUserMedia({ video: true, audio: true })
+        .getUserMedia({ video: true, audio: true }) // IMPORTANT: Ensure audio is requested here too
         .then((recoveredStream) => {
           console.log(
             "Successfully recovered a local stream:",
             recoveredStream
-          );
-          setLocalStream(recoveredStream); // Update local state with the recovered stream
-          toast.success("Camera switched (recovered).");
+          ); // Stop tracks of the *old* localStream before setting the recovered one
 
-          // Attempt to replace the track in the peer connection with the recovered track
+          if (localStream) {
+            // Ensure localStream is not null
+            localStream.getTracks().forEach((track) => {
+              if (track.readyState !== "ended") track.stop();
+            });
+          }
+
+          setLocalStream(recoveredStream); // Update local state with the recovered stream
+          toast.success("Camera switched (recovered)."); // Attempt to replace *both* video and audio tracks in the peer connection with the recovered tracks
+
           if (callRef.current?.peer && callRef.current.peer._pc) {
-            console.log("Attempting to replace track with recovered stream...");
+            console.log(
+              "Attempting to replace tracks with recovered stream..."
+            );
             const pc = callRef.current.peer._pc;
             const senders = pc.getSenders();
+
             const videoSender = senders.find(
               (sender) => sender.track && sender.track.kind === "video"
             );
             const recoveredVideoTrack = recoveredStream.getVideoTracks()[0];
+
+            const audioSender = senders.find(
+              // <-- Find audio sender in recovery
+              (sender) => sender.track && sender.track.kind === "audio"
+            );
+            const recoveredAudioTrack = recoveredStream.getAudioTracks()[0]; // <-- Get recovered audio track // Replace video track
 
             if (videoSender && recoveredVideoTrack) {
               if (videoSender.track !== recoveredVideoTrack) {
@@ -360,57 +624,58 @@ function CallProvider({ children }) {
                 console.log(
                   "Video track replaced with recovered stream track."
                 );
-              } else {
-                console.log("Recovered track is already the current track.");
-              }
-
-              // Update current camera ID and facing mode based on the recovered stream
-              const trackSettings = recoveredVideoTrack.getSettings();
-              if (trackSettings.deviceId) {
-                setCurrentCameraId(trackSettings.deviceId);
-              }
-              if (trackSettings.facingMode) {
-                setFacingMode(trackSettings.facingMode);
-              } else if (trackSettings.deviceId) {
-                // Try to infer facing mode from device list again using deviceId
-                navigator.mediaDevices.enumerateDevices().then((devices) => {
-                  const device = devices.find(
-                    (d) => d.deviceId === trackSettings.deviceId
-                  );
-                  if (device && device.label) {
-                    const label = device.label.toLowerCase();
-                    if (label.includes("front") || label.includes("user"))
-                      setFacingMode("user");
-                    else if (
-                      label.includes("back") ||
-                      label.includes("environment")
-                    )
-                      setFacingMode("environment");
-                    else setFacingMode("user"); // Default
-                  }
-                });
-              } else {
-                setFacingMode("user"); // Default if no info
               }
             } else {
-              console.warn(
-                "Could not find video sender or recovered video track to replace. Attempting to add recovered tracks."
-              );
-              // Fallback: just add the tracks from the recovered stream
-              recoveredStream.getTracks().forEach((track) => {
-                const existingSender = senders.find(
-                  (sender) => sender.track === track
+              console.warn("Could not replace video track during recovery.");
+            } // Replace audio track during recovery
+
+            if (audioSender && recoveredAudioTrack) {
+              // <-- Replace audio track in recovery
+              if (audioSender.track !== recoveredAudioTrack) {
+                audioSender.replaceTrack(recoveredAudioTrack);
+                console.log(
+                  "Audio track replaced with recovered stream track."
                 );
-                if (!existingSender) {
-                  pc.addTrack(track, recoveredStream);
-                  console.log(`Added recovered track: ${track.kind}`);
+              }
+            } else {
+              console.warn("Could not replace audio track during recovery.");
+              toast.error("Audio may not be working after recovery."); // <-- Warn user
+            } // Update current camera ID and facing mode based on the recovered stream
+
+            const trackSettings = recoveredVideoTrack?.getSettings(); // Use optional chaining
+            if (trackSettings?.deviceId) {
+              // Use optional chaining
+              setCurrentCameraId(trackSettings.deviceId);
+            }
+            if (trackSettings?.facingMode) {
+              // Use optional chaining
+              setFacingMode(trackSettings.facingMode);
+            } else if (trackSettings?.deviceId) {
+              // Use optional chaining
+              // Try to infer facing mode from device list again using deviceId
+              navigator.mediaDevices.enumerateDevices().then((devices) => {
+                const device = devices.find(
+                  (d) => d.deviceId === trackSettings.deviceId
+                );
+                if (device && device.label) {
+                  const label = device.label.toLowerCase();
+                  if (label.includes("front") || label.includes("user"))
+                    setFacingMode("user");
+                  else if (
+                    label.includes("back") ||
+                    label.includes("environment")
+                  )
+                    setFacingMode("environment");
+                  else setFacingMode("user"); // Default
                 }
               });
+            } else {
+              setFacingMode("user"); // Default if no info
             }
           } else {
             console.warn(
               "Peer connection not available during recovery attempt. Stream updated locally only."
-            );
+            ); // If the peer connection is gone during recovery, audio/video won't reach remote. // Consider ending the call. // destroyCall(); // Uncomment if you want to end the call on peer error during recovery
           }
         })
         .catch((recoveryErr) => {
@@ -418,11 +683,9 @@ function CallProvider({ children }) {
             "Failed to recover local stream after switch error:",
             recoveryErr
           );
-          toast.error("Critical error: Could not restore camera.");
-          // If recovery also fails, consider ending the call as the camera is unusable
-          destroyCall(); // Automatically end call if camera fails critically
-        });
-      // --- End Robust Error Recovery ---
+          toast.error("Critical error: Could not restore camera/audio."); // If recovery also fails, consider ending the call as the camera/audio is unusable
+          destroyCall(); // Automatically end call if media fails critically
+        }); // --- End Robust Error Recovery ---
     }
   }, [
     localStream,
@@ -431,8 +694,8 @@ function CallProvider({ children }) {
     setLocalStream,
     setCurrentCameraId,
     setFacingMode,
-    destroyCall,
-  ]); // Added destroyCall dependency for error recovery
+    destroyCall, // dependency needed for error recovery
+  ]);
 
   useEffect(() => {
     // Ensure socket handlers don't rely on potentially stale state from closure
