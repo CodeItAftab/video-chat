@@ -123,9 +123,9 @@ function Call() {
   // }, [localStream, remoteStream, isVideoSwapped]);
 
   // Toggle controls visibility
-  const toggleControls = () => {
+  const toggleControls = useCallback(() => {
     setShowControls((prev) => !prev);
-  };
+  }, []);
 
   useEffect(() => {
     if (isVideoSwapped) {
@@ -369,7 +369,7 @@ function Call() {
       className="relative h-full w-full flex flex-col bg-[#111b21] overflow-hidden"
       onMouseMove={() => setShowControls(true)}
       onTouchStart={() => setShowControls(true)}
-      onClick={toggleControls}
+      onClick={() => toggleControls()}
     >
       {/* Call info bar */}
       <div
