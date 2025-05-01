@@ -4,10 +4,11 @@ const initialState = {
   callUser: null,
   isOnCall: false,
   isCalling: false,
-  isReceivingCall: false,
+  isIncommingCall: false,
   isCallRejected: false,
   isCallAccepted: false,
   isCallEnded: false,
+  signalData: null,
 };
 
 export const slice = createSlice({
@@ -23,8 +24,8 @@ export const slice = createSlice({
     setIsCalling: (state, action) => {
       state.isCalling = action.payload;
     },
-    setIsReceivingCall: (state, action) => {
-      state.isReceivingCall = action.payload;
+    setIsIncommingCall: (state, action) => {
+      state.isIncommingCall = action.payload;
     },
     setIsCallRejected: (state, action) => {
       state.isCallRejected = action.payload;
@@ -35,14 +36,18 @@ export const slice = createSlice({
     setIsCallEnded: (state, action) => {
       state.isCallEnded = action.payload;
     },
+    setSignalData: (state, action) => {
+      state.signalData = action.payload;
+    },
     clearCallState: (state) => {
       state.callUser = null;
       state.isOnCall = false;
       state.isCalling = false;
-      state.isReceivingCall = false;
       state.isCallRejected = false;
       state.isCallAccepted = false;
       state.isCallEnded = false;
+      state.signalData = null;
+      state.isIncommingCall = false;
     },
   },
 });
@@ -51,10 +56,11 @@ export const {
   setCallUser,
   setIsOnCall,
   setIsCalling,
-  setIsReceivingCall,
+  setIsIncommingCall,
   setIsCallRejected,
   setIsCallAccepted,
   setIsCallEnded,
+  setSignalData,
   clearCallState,
 } = slice.actions;
 

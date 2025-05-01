@@ -1,4 +1,5 @@
 import { FetchAllUsers } from "@/app/slices/user";
+import CallProvider from "@/Provider/CallProvider";
 import SocketProvider from "@/Provider/SocketProvider";
 import React, { useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
@@ -26,9 +27,11 @@ function MainLayout() {
 
   return (
     <SocketProvider>
-      <div className="h-full w-full ">
-        <Outlet />
-      </div>
+      <CallProvider>
+        <div className="h-full w-full ">
+          <Outlet />
+        </div>
+      </CallProvider>
     </SocketProvider>
   );
 }

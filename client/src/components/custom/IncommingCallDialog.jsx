@@ -11,18 +11,19 @@ import { Button } from "../ui/button";
 import { useSocket } from "@/hooks/socket";
 import { useNavigate } from "react-router-dom";
 import { useDispatch } from "react-redux";
-import { setIsOnCall } from "@/app/slices/call";
+// import { setIsOnCall } from "@/app/slices/call";
 
-function IncomingCall({ open, setOpen, user }) {
+function IncomingCall({ open, setOpen, user, answerCall, endCall }) {
   const { socket } = useSocket();
   const navigate = useNavigate();
-  const dispatch = useDispatch();
+  // const dispatch = useDispatch();
   console.log(user, "user in incoming call");
 
   const handleClose = useCallback(() => {
     setOpen(false);
     socket?.emit("reject-call", { userId: user?._id });
-  }, [setOpen, socket, user]);
+    endCall();
+  }, [setOpen, socket, user, endCall]);
 
   const handleOpenChange = useCallback(
     (open) => {
@@ -33,10 +34,9 @@ function IncomingCall({ open, setOpen, user }) {
 
   const handleAccept = useCallback(() => {
     setOpen(false);
-    socket?.emit("accept-call", { userId: user?._id });
-    dispatch(setIsOnCall(true));
-    navigate("/call", { replace: true });
-  }, [setOpen, socket, user, navigate, dispatch]);
+    answerCall();
+    navigate("/call");
+  }, [setOpen, answerCall, navigate]);
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>

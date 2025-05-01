@@ -1,113 +1,98 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
-import { useDispatch, useSelector } from "react-redux";
-import { setIsCalling, setIsOnCall } from "@/app/slices/call";
-import { useSocket } from "@/hooks/socket";
+import React, { useEffect, useRef } from "react"; // Removed useState
 import { Button } from "@/components/ui/button";
-import { MicrophoneSlash, Phone, VideoCameraSlash } from "phosphor-react";
+import { useCall } from "@/hooks/call"; // Assuming this hook correctly gets context
 
 function Call() {
-  const [localStream, setLocalStream] = useState(null);
+  // Get streams and functions directly from context via the hook
+  const { localStream, remoteStream, endCall } = useCall();
   const localVideoRef = useRef(null);
-  const localVideoBoxRef = useRef(null);
-  const isDragging = useRef(false);
-  const offset = useRef({ x: 0, y: 0 });
-  const currentSide = useRef("right");
+  const remoteVideoRef = useRef(null);
 
-  const { isCalling, callUser, isOnCall } = useSelector((state) => state.call);
-  const { socket } = useSocket();
-  const dispatch = useDispatch();
-
-  const InitLocalStream = useCallback(async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: false,
-      });
-
-      setLocalStream(stream);
-
-      if (localVideoRef.current) {
-        localVideoRef.current.srcObject = stream;
-        localVideoRef.current.onloadedmetadata = () => {
-          localVideoRef.current.muted = true;
-          localVideoRef.current.play();
-        };
-      }
-    } catch (error) {
-      console.error("Error accessing media devices:", error);
+  // Effect to set the local video stream
+  useEffect(() => {
+    if (localStream && localVideoRef.current) {
+      console.log("Assigning local stream to video element:", localStream);
+      localVideoRef.current.srcObject = localStream;
+    } else if (localVideoRef.current) {
+      // Clear srcObject if stream becomes null (e.g., on call end)
+      localVideoRef.current.srcObject = null;
     }
-  }, []);
+    // Optional: Cleanup to explicitly remove srcObject when effect re-runs or component unmounts
+    // return () => {
+    //   if (localVideoRef.current) localVideoRef.current.srcObject = null;
+    // }
+  }, [localStream]); // Depend on the localStream state from context
 
+  // Effect to set the remote video stream
   useEffect(() => {
-    document.title = "Call | Video Chat App";
-  }, []);
+    if (remoteStream && remoteVideoRef.current) {
+      console.log("Assigning remote stream to video element:", remoteStream);
+      remoteVideoRef.current.srcObject = remoteStream;
+    } else if (remoteVideoRef.current) {
+      // Clear srcObject if stream becomes null
+      remoteVideoRef.current.srcObject = null;
+    }
+    // Optional: Cleanup
+    // return () => {
+    //   if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
+    // }
+  }, [remoteStream]); // Depend on the remoteStream state from context
 
-  useEffect(() => {
-    InitLocalStream();
-  }, [InitLocalStream]);
-
-  useEffect(() => {
-    socket?.on("call-accepted", (data) => {
-      console.log("Call accepted", data);
-      alert("Call accepted");
-      // dispatch(setIsCalling(false));
-      // dispatch(setIsOnCall(true));
-    });
-
-    return () => {
-      socket?.off("call-accepted");
-    };
-  }, [socket, dispatch]);
-
-  // Add confirmation before reloading or leaving the page
-  useEffect(() => {
-    const handleBeforeUnload = (event) => {
-      event.preventDefault();
-      console.log("Before unload event triggered");
-      // Show a confirmation dialog to the user
-      event.returnValue = "Are you sure you want to leave?";
-      // This is required for modern browsers to show the confirmation dialog
-
-      // event.returnValue = ""; // Required for modern browsers to show the confirmation dialog
-    };
-
-    window.addEventListener("beforeunload", handleBeforeUnload);
-
-    return () => {
-      window.removeEventListener("beforeunload", handleBeforeUnload);
-    };
-  }, []);
+  // No longer need the event listener for remote stream
 
   return (
-    <div className="bg-black h-full w-full flex flex-col relative">
-      {!isCalling && isOnCall && (
-        <div className="flex relative items-center sm:justify-center justify-between lg:bg--yellow-200 md:bg--red-400 sm:bg--slate-200 p--4 h-full w-full">
-          <div className="lg:w-2/3 md:w-10/12 sm:h-[95%] h-full grow--0 sm:rounded-md bg-slate--900">
-            <video
-              className="object-fit h-full object-center aspect-video"
-              ref={localVideoRef}
-              autoPlay
-              playsInline
-              muted
-            ></video>
-          </div>
-          <div
-            ref={localVideoBoxRef}
-            className="local-video-box w-24 h-32 sm:w-28 sm:h-36 md:w-32 md:h-40 lg:w-40 lg:h-48 absolute lg:bottom-4 md:bottom-2 bottom-2 lg:right-10 md:right-8 right-4 rounded-md bg-slate-600"
-          ></div>
-        </div>
-      )}
-      {isCalling && (
-        <div className="h-full w-full bg-slate-900 flex p-8 justify-center">
-          <div className="min-h-64 min-w-64 max-h-1/2 flex flex-col items-center gap-6 bg-slate--300">
-            <h1 className="text-white text-xl font-normal">Calling...</h1>
-            <div className="h-24 w-24 mt-16 bg-black rounded-full overflow-hidden flex items-center justify-center">
-              <img src={callUser?.avatar} alt={callUser?.name} />
+    <div className="h-full w-full flex flex-col items-center justify-center bg-slate-200 gap-2">
+      <div className="flex flex-col items-center justify-center gap-4 flex-grow">
+        {/* Local Video */}
+        <div className="relative">
+          <video
+            className="h-[200px] w-[200px] bg-slate-600 rounded" // Darker bg for contrast
+            ref={localVideoRef}
+            autoPlay
+            playsInline
+            muted // Keep local muted to avoid echo
+          ></video>
+          {!localStream && (
+            <div className="absolute inset-0 flex items-center justify-center text-white">
+              Setting up...
             </div>
-            <h2 className="text-white text-xl">{callUser?.name}</h2>
-          </div>
+          )}
         </div>
-      )}
+
+        {/* Remote Video */}
+        <div className="relative">
+          <video
+            className="h-[200px] w-[200px] bg-slate-500 rounded"
+            ref={remoteVideoRef}
+            autoPlay
+            playsInline // Important for mobile
+          ></video>
+          {localStream &&
+            !remoteStream && ( // Show waiting only if we are ready but they aren't yet
+              <div className="absolute inset-0 flex items-center justify-center text-white">
+                Connecting...
+              </div>
+            )}
+          {!localStream &&
+            !remoteStream && ( // Optional: Show different message if local isn't ready either
+              <div className="absolute inset-0 flex items-center justify-center text-white">
+                Please wait...
+              </div>
+            )}
+        </div>
+      </div>
+
+      {/* Call Controls */}
+      <div className="w-full h-40 flex items-center justify-center">
+        {/* Disable button if streams aren't ready or call isn't fully established? */}
+        <Button
+          onClick={endCall}
+          className="bg-red-500 hover:bg-red-600 text-white px-6 py-3 rounded-full text-lg font-semibold disabled:opacity-50"
+          // disabled={!localStream || !remoteStream} // Example: enable only when connected
+        >
+          End Call
+        </Button>
+      </div>
     </div>
   );
 }

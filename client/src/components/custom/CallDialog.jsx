@@ -8,8 +8,11 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Button } from "../ui/button";
+import { useCall } from "@/hooks/call";
 
 function CallDialog({ open, handleClose, handleOpenChange, user }) {
+  const { answerCall } = useCall();
+
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger></DialogTrigger>
@@ -19,19 +22,19 @@ function CallDialog({ open, handleClose, handleOpenChange, user }) {
             <div className="flex w-10/12 items-center gap-4 h-full bg-slate-200 p-3 rounded-full mx-auto">
               <div className="h-8 w-8  rounded-full overflow-hidden flex items-center justify-center">
                 <img
-                  src={user.avatar}
+                  src={user?.avatar}
                   alt="av"
                   className="w-full object-center object-cover"
                   loading="lazy"
                 />
               </div>
               <span className="sm:inline-block md:text-xl text-lg ">
-                {user.name}
+                {user?.name}
               </span>
             </div>
           </DialogTitle>
           <DialogDescription className={"hidden"}>
-            This will start a video call with {user.name}. Are you sure?
+            This will start a video call with {user?.name}. Are you sure?
           </DialogDescription>
           <div className="mt-6 w-10/12 mx-auto flex items-center justify-center gap-2">
             <Button
@@ -41,7 +44,10 @@ function CallDialog({ open, handleClose, handleOpenChange, user }) {
             >
               Cancel
             </Button>
-            <Button className={"w-1/2 cursor-pointer font-normal  ml-2"}>
+            <Button
+              className={"w-1/2 cursor-pointer font-normal  ml-2"}
+              onClick={answerCall}
+            >
               Start Call
             </Button>
           </div>

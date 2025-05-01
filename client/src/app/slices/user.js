@@ -22,6 +22,19 @@ export const slice = createSlice({
     setActiveusers: (state, action) => {
       state.activeUsers = action.payload;
     },
+    pushActiveUser: (state, action) => {
+      const user = state.activeUsers.find(
+        (user) => user._id === action.payload._id
+      );
+      if (!user) {
+        state.activeUsers.push(action.payload);
+      }
+    },
+    removeActiveUser: (state, action) => {
+      state.activeUsers = state.activeUsers.filter(
+        (user) => user._id !== action.payload._id
+      );
+    },
     clearUsers: (state) => {
       state.users = [];
       state.activeUsers = [];
@@ -29,8 +42,15 @@ export const slice = createSlice({
   },
 });
 
-export const { addUser, removeUser, setUsers, setActiveusers, clearUsers } =
-  slice.actions;
+export const {
+  addUser,
+  removeUser,
+  setUsers,
+  setActiveusers,
+  clearUsers,
+  pushActiveUser,
+  removeActiveUser,
+} = slice.actions;
 
 export default slice.reducer;
 // This slice manages the user-related state in the Redux store.

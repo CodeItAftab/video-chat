@@ -1,6 +1,5 @@
 const { Server } = require("socket.io");
 const User = require("../models/user");
-const user = require("../models/user");
 
 _io = null;
 
@@ -73,28 +72,50 @@ const ConnectSocket = (server) => {
         }
       });
 
-      socket.on("initiate-call", async ({ userId, signalData }) => {
-        //
-        console.log("initiate-call", {
-          userId,
-          signalData,
-        });
-        const to = userIdToSocketId.get(userId);
-
-        _io.to(to).emit("incomming-call", {
-          signalData,
-          user: myData,
-        });
+      socket.on("call-user", async ({ userId }) => {
+        console.log("call-user", userId);
+        const socketId = userIdToSocketId.get(userId);
+        const userDetails = await User.findById(yourId).select(
+          "name email avatar"
+        );
+        // console.log(userDetails, "userDetails");
+        if (socketId) {
+          _io.to(socketId).emit("incomming-call", {
+            from: yourId,
+            user: userDetails,
+          });
+        }
       });
 
-      socket.on("answer-call", (data) => {
-        to = userIdToSocketId.get(data.userId);
-        _io.to(to).emit("call-accepted", { signalData: data.signalData });
-        console.log("callAccepted", data.signalData);
+      socket.on("reject-call", ({ userId }) => {
+        const socketId = userIdToSocketId.get(userId);
+        console.log(userId);
+        if (socketId) {
+          _io.to(socketId).emit("call-rejected", {
+            message: "Call rejected",
+          });
+        }
       });
 
-      socket.on("endCall", ({ to }) => {
-        _io.to(to).emit("callEnded");
+      socket.on("accept-call", ({ userId }) => {
+        const socketId = userIdToSocketId.get(userId);
+        console.log(userId);
+        if (socketId) {
+          _io.to(socketId).emit("call-accepted", {
+            message: "Call accepted",
+          });
+        }
+      });
+
+      socket.on("end-call", ({ userId }) => {
+        console.log("end-call", userId);
+        const socketId = userIdToSocketId.get(userId);
+        console.log(userId);
+        if (socketId) {
+          _io.to(socketId).emit("call-ended", {
+            message: "Call ended",
+          });
+        }
       });
     });
   }

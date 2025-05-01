@@ -9,38 +9,32 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Button } from "../ui/button";
-import { useSocket } from "@/hooks/socket";
-import { useNavigate } from "react-router-dom";
 import { useDispatch } from "react-redux";
-import { setCallUser, setIsCalling } from "@/app/slices/call";
+import { setCallUser } from "@/app/slices/call";
+import { useCall } from "@/hooks/call";
+import { useNavigate } from "react-router-dom";
 
 function UserListItem({ user }) {
   const [open, setOpen] = React.useState(false);
-  const { socket } = useSocket();
-  const navigate = useNavigate();
   const dispatch = useDispatch();
-  const handleOpen = () => {
+  const navigate = useNavigate();
+  const { initiateCall } = useCall();
+
+  const handleOpen = useCallback(() => {
     setOpen(!open);
-  };
+    dispatch(setCallUser(user));
+  }, [open, dispatch, user]);
+
   const handleClose = useCallback(() => {
     setOpen(false);
-  }, []);
+    dispatch(setCallUser(null));
+  }, [dispatch]);
 
-  const handleCallStart = useCallback(
-    (e) => {
-      e.preventDefault();
-      e.stopPropagation(); // Prevent the dialog from closing
-      console.log("Start Call Clicked");
-      dispatch(setCallUser(user));
-      dispatch(setIsCalling(true));
-
-      socket.emit("call-user", { userId: user._id });
-      navigate("/call");
-      handleClose(); // Close the dialog after emitting the event
-      // Add your logic for starting the call here
-    },
-    [socket, user, navigate, handleClose, dispatch]
-  );
+  const handleCallStart = useCallback(() => {
+    initiateCall();
+    navigate("/call");
+    setOpen(false);
+  }, [initiateCall, navigate, setOpen]);
 
   return (
     <div
@@ -90,21 +84,6 @@ function UserListItem({ user }) {
             <DialogDescription className={"hidden"}>
               This will start a video call with {user.name}. Are you sure?
             </DialogDescription>
-            {/* <div className="mt-6 w-10/12 mx-auto flex items-center justify-center gap-2">
-              <Button
-                variant={"outline"}
-                className={"w-1/2  cursor-pointer bg-slate-200"}
-                onClick={handleClose}
-              >
-                Cancel
-              </Button>
-              <Button
-                className={"w-1/2 cursor-pointer font-normal  ml-2"}
-                onClick={handleCallStart}
-              >
-                Start Call
-              </Button>
-            </div> */}
             <div className="mt-6 w-full mx-auto flex items-center justify-center gap-2 px-3">
               <Button
                 variant={"outline"}

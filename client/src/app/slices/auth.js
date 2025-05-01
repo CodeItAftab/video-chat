@@ -2,6 +2,7 @@ import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
 import { logoutUser } from "@/lib/axios"; // Adjust the import path as necessary
 import { clearUsers } from "./user";
 import toast from "react-hot-toast";
+import { clearCallState } from "./call";
 
 const initialState = {
   user: null,
@@ -42,6 +43,7 @@ export const Logout = createAsyncThunk(
         console.log("Logout successful");
         dispatch(logout());
         dispatch(clearUsers());
+        dispatch(clearCallState());
         toast.success("Logout successful");
       } else {
         console.error("Logout failed:", response.data.message);
