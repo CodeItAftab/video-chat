@@ -13,7 +13,6 @@ import {
 import { CallContext } from "@/context/CallContext";
 import { useSocket } from "@/hooks/socket";
 import toast from "react-hot-toast";
-import { isMobileDevice } from "@/lib/utils";
 
 function CallProvider({ children }) {
   const callRef = useRef(null);
@@ -23,7 +22,6 @@ function CallProvider({ children }) {
   const [open, setOpen] = React.useState(false);
   const [videoDevices, setVideoDevices] = useState([]);
   const [currentCameraId, setCurrentCameraId] = useState(null);
-  const [facingMode, setFacingMode] = useState("user"); // 'user' = front, 'environment' = rear
 
   const { callUser, signalData: userSignalData } = useSelector(
     (state) => state.call
@@ -174,117 +172,49 @@ function CallProvider({ children }) {
     // socket?.emit("reject-call", { userId: callUser?._id });
   }, [dispatch /*, socket, callUser*/]); // Add dependencies if using socket here
 
-  // const switchCamera = async () => {
-  //   if (!localStream) return;
-
-  //   // Get the list of video devices again (in case it changes)
-  //   const devices = await navigator.mediaDevices.enumerateDevices();
-  //   const videoInputs = devices.filter((d) => d.kind === "videoinput");
-
-  //   if (videoInputs.length < 2) return alert("No alternate camera found.");
-
-  //   // Find next camera
-  //   const currentIndex = videoInputs.findIndex(
-  //     (d) => d.deviceId === currentCameraId
-  //   );
-  //   const nextIndex = (currentIndex + 1) % videoInputs.length;
-  //   const nextDeviceId = videoInputs[nextIndex].deviceId;
-
-  //   try {
-  //     const newStream = await navigator.mediaDevices.getUserMedia({
-  //       video: { deviceId: { exact: nextDeviceId } },
-  //       audio: false, // Keep existing audio
-  //     });
-
-  //     // Replace the video track in the peer connection
-  //     const newVideoTrack = newStream.getVideoTracks()[0];
-  //     const oldVideoTrack = localStream.getVideoTracks()[0];
-
-  //     if (callRef.current?.peer && callRef.current.peer.streams[0]) {
-  //       const sender = callRef.current.peer._pc
-  //         .getSenders()
-  //         .find((s) => s.track?.kind === "video");
-
-  //       if (sender) {
-  //         sender.replaceTrack(newVideoTrack);
-  //       }
-  //     }
-
-  //     // Stop old video track and update local stream
-  //     oldVideoTrack.stop();
-  //     localStream.removeTrack(oldVideoTrack);
-  //     localStream.addTrack(newVideoTrack);
-  //     setCurrentCameraId(nextDeviceId);
-  //   } catch (err) {
-  //     console.error("Failed to switch camera:", err);
-  //   }
-  // };
-
   const switchCamera = async () => {
     if (!localStream) return;
 
+    // Get the list of video devices again (in case it changes)
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const videoInputs = devices.filter((d) => d.kind === "videoinput");
+
+    if (videoInputs.length < 2) return alert("No alternate camera found.");
+
+    // Find next camera
+    const currentIndex = videoInputs.findIndex(
+      (d) => d.deviceId === currentCameraId
+    );
+    const nextIndex = (currentIndex + 1) % videoInputs.length;
+    const nextDeviceId = videoInputs[nextIndex].deviceId;
+
     try {
-      const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-      let newStream;
+      const newStream = await navigator.mediaDevices.getUserMedia({
+        video: { deviceId: { exact: nextDeviceId } },
+        audio: false, // Keep existing audio
+      });
 
-      if (isMobile) {
-        // Toggle between front and rear for mobile
-        const newFacingMode = facingMode === "user" ? "environment" : "user";
-
-        newStream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: newFacingMode },
-          audio: false, // We preserve audio from existing stream
-        });
-
-        setFacingMode(newFacingMode);
-      } else {
-        // Desktop: cycle through video input devices
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        const videoInputs = devices.filter((d) => d.kind === "videoinput");
-
-        if (videoInputs.length < 2) {
-          alert("No alternative camera found.");
-          return;
-        }
-
-        const currentIndex = videoInputs.findIndex(
-          (d) => d.deviceId === currentCameraId
-        );
-        const nextIndex = (currentIndex + 1) % videoInputs.length;
-        const nextDeviceId = videoInputs[nextIndex].deviceId;
-
-        newStream = await navigator.mediaDevices.getUserMedia({
-          video: { deviceId: { exact: nextDeviceId } },
-          audio: false,
-        });
-
-        setCurrentCameraId(nextDeviceId);
-      }
-
+      // Replace the video track in the peer connection
       const newVideoTrack = newStream.getVideoTracks()[0];
       const oldVideoTrack = localStream.getVideoTracks()[0];
 
-      // Replace track in peer connection
-      const sender = callRef.current?.peer?._pc
-        ?.getSenders()
-        ?.find((s) => s.track?.kind === "video");
+      if (callRef.current?.peer && callRef.current.peer.streams[0]) {
+        const sender = callRef.current.peer._pc
+          .getSenders()
+          .find((s) => s.track?.kind === "video");
 
-      if (sender) {
-        await sender.replaceTrack(newVideoTrack);
+        if (sender) {
+          sender.replaceTrack(newVideoTrack);
+        }
       }
 
-      // Stop old video track and update stream
+      // Stop old video track and update local stream
       oldVideoTrack.stop();
-
-      const updatedStream = new MediaStream([
-        newVideoTrack,
-        ...localStream.getAudioTracks(),
-      ]);
-
-      setLocalStream(updatedStream);
+      localStream.removeTrack(oldVideoTrack);
+      localStream.addTrack(newVideoTrack);
+      setCurrentCameraId(nextDeviceId);
     } catch (err) {
       console.error("Failed to switch camera:", err);
-      alert("Could not switch camera.");
     }
   };
 
@@ -350,8 +280,6 @@ function CallProvider({ children }) {
         currentCameraId,
         setCurrentCameraId,
         setVideoDevices,
-        facingMode,
-        setFacingMode,
       }}
     >
       {children}
